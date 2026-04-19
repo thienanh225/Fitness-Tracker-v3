@@ -348,6 +348,72 @@ textarea.form-input { resize:vertical; min-height:60px; }
 .gym-item:last-child { border-bottom:none; }
 .gym-name { flex:1; font-size:14px; }
 .gym-actions { display:flex; gap:6px; }
+
+/* --- BENCHMARK TAB (v3 Phase 2) --- */
+.bench-card {
+  background:var(--card); border:1px solid var(--card-border);
+  border-radius:var(--radius); padding:14px; margin-bottom:10px;
+}
+.bench-card-header {
+  display:flex; justify-content:space-between; align-items:flex-start;
+  cursor:pointer; gap:8px;
+}
+.bench-card-title { font-weight:600; font-size:14px; margin-bottom:4px; }
+.bench-card-meta { font-size:12px; color:var(--text3); font-family:var(--mono); }
+.bench-card-pr {
+  font-family:var(--mono); font-weight:700; font-size:15px;
+  color:var(--amber); white-space:nowrap;
+}
+.bench-card-pr.no-pr { color:var(--text3); font-weight:500; }
+.bench-history {
+  margin-top:10px; padding-top:10px;
+  border-top:1px solid var(--card-border);
+  display:none;
+}
+.bench-history.open { display:block; }
+.bench-entry {
+  display:flex; align-items:center; gap:8px;
+  padding:6px 0; font-size:13px;
+  border-bottom:1px solid var(--card-border);
+}
+.bench-entry:last-child { border-bottom:none; }
+.bench-entry-date { color:var(--text3); font-family:var(--mono); font-size:11px; flex:0 0 auto; }
+.bench-entry-val { flex:1; font-family:var(--mono); font-weight:600; }
+.bench-entry-notes { flex:0 0 auto; color:var(--text3); font-size:11px; max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bench-entry-pr-mark { color:var(--amber); font-weight:700; }
+.bench-empty {
+  text-align:center; padding:24px 12px;
+  color:var(--text3); font-size:13px;
+}
+.bench-category-header {
+  font-size:11px; font-weight:700; color:var(--text3);
+  text-transform:uppercase; letter-spacing:0.5px;
+  margin:14px 0 6px; padding-bottom:4px;
+  border-bottom:1px solid var(--card-border);
+}
+.bench-category-header:first-child { margin-top:0; }
+.bench-picker-item {
+  display:flex; align-items:center; gap:10px;
+  padding:10px 0; border-bottom:1px solid var(--card-border);
+  cursor:pointer;
+}
+.bench-picker-item:last-child { border-bottom:none; }
+.bench-picker-check {
+  width:22px; height:22px; border-radius:6px;
+  border:2px solid var(--card-border); flex:0 0 auto;
+  display:flex; align-items:center; justify-content:center;
+  font-size:13px; color:#fff; transition:all 0.15s;
+}
+.bench-picker-item.active .bench-picker-check {
+  background:var(--green); border-color:var(--green);
+}
+.bench-picker-info { flex:1; min-width:0; }
+.bench-picker-name { font-size:14px; font-weight:500; }
+.bench-picker-sub { font-size:11px; color:var(--text3); font-family:var(--mono); margin-top:1px; }
+.bench-picker-del {
+  color:var(--coral); font-size:13px; padding:4px 8px;
+  cursor:pointer; flex:0 0 auto;
+}
 </style>
 </head>
 <body>
@@ -502,6 +568,37 @@ textarea.form-input { resize:vertical; min-height:60px; }
     </div>
   </div>
 
+  <!-- TAB: BENCHMARK (v3 Phase 2) -->
+  <div class="tab-content" id="tabBenchmark">
+    <div class="card">
+      <div class="card-title">Log Benchmark</div>
+      <div class="form-row">
+        <select class="form-select" id="benchType" style="flex:1">
+          <option value="">Select benchmark…</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <input class="form-input" id="benchDate" type="date" style="flex:1.2">
+        <input class="form-input" id="benchTime" type="time" style="flex:0.9">
+      </div>
+      <div class="form-row">
+        <input class="form-input" id="benchValue" type="number" step="any" placeholder="Value" style="flex:1">
+        <span id="benchUnit" style="font-size:13px;color:var(--text3);min-width:52px;text-align:center;font-family:var(--mono)">—</span>
+      </div>
+      <div class="form-row">
+        <input class="form-input" id="benchNotes" placeholder="Notes (optional)">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn btn-primary btn-block" id="btnSaveBench">Save entry</button>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:12px 0 8px">
+      <div class="card-title" style="margin-bottom:0">Tracked Benchmarks</div>
+      <button class="btn btn-secondary btn-sm" id="btnManageBench">⚙ Manage types</button>
+    </div>
+    <div id="benchCards"></div>
+  </div>
+
   <!-- TAB: BODY -->
   <div class="tab-content" id="tabBody">
     <div class="card">
@@ -557,6 +654,7 @@ textarea.form-input { resize:vertical; min-height:60px; }
     <button class="tab-btn active" data-tab="tabHabits"><span class="tab-icon">✓</span>Habits</button>
     <button class="tab-btn" data-tab="tabClimb"><span class="tab-icon">🧗</span>Climb</button>
     <button class="tab-btn" data-tab="tabRun"><span class="tab-icon">🏃</span>Run</button>
+    <button class="tab-btn" data-tab="tabBenchmark"><span class="tab-icon">🎯</span>Bench</button>
     <button class="tab-btn" data-tab="tabBody"><span class="tab-icon">♥</span>Body</button>
     <button class="tab-btn" data-tab="tabExport"><span class="tab-icon">📊</span>Export</button>
   </div>
@@ -589,7 +687,38 @@ textarea.form-input { resize:vertical; min-height:60px; }
       <div class="card-title">Dashboard Metrics</div>
       <div id="metricToggles" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     </div>
+    <div style="margin-top:16px">
+      <div class="card-title">Benchmarks</div>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:8px">Pick which benchmarks to track. Add custom ones for anything not listed.</p>
+      <button class="btn btn-secondary btn-sm btn-block" id="btnOpenBenchPickerFromProfile">Configure tracked benchmarks</button>
+    </div>
     <button class="btn btn-primary btn-block" style="margin-top:16px" id="btnSaveProfile">Save Profile</button>
+  </div>
+</div>
+
+<!-- BENCHMARK PICKER MODAL (v3 Phase 2) -->
+<div class="modal-overlay" id="benchPickerModal">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeModal('benchPickerModal')">×</button>
+    <h3>Benchmark Types</h3>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:12px">
+      Tap to toggle tracking. Past entries are preserved when a type is removed — re-enable to see them again.
+    </p>
+    <div id="benchPickerList"></div>
+    <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--card-border)">
+      <div class="card-title">Add Custom Benchmark</div>
+      <div class="form-row">
+        <input class="form-input" id="customBenchName" placeholder="Name (e.g. Farmer carry)">
+      </div>
+      <div class="form-row">
+        <input class="form-input" id="customBenchUnit" placeholder="Unit (kg, seconds, reps…)" style="flex:1">
+        <select class="form-select" id="customBenchDirection" style="flex:1">
+          <option value="higher">Higher is better</option>
+          <option value="lower">Lower is better</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-sm btn-block" id="btnAddCustomBench" style="margin-top:4px">+ Add custom</button>
+    </div>
   </div>
 </div>
 
@@ -729,6 +858,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'tabRun') loadRunTab();
     if (btn.dataset.tab === 'tabBody') loadBodyTab();
     if (btn.dataset.tab === 'tabClimb') loadClimbTab();
+    if (btn.dataset.tab === 'tabBenchmark') loadBenchmarkTab();
   });
 });
 
@@ -1430,6 +1560,373 @@ document.getElementById('btnSaveBody').addEventListener('click', async () => {
 
 document.getElementById('btnSyncHealth').addEventListener('click', () => {
   window.location.href = 'shortcuts://run-shortcut?name=Fitness%20Sync';
+});
+
+// --- BENCHMARK TAB (v3 Phase 2) ---
+// State: the tracked types + the master list are fetched once per tab load.
+// Entries (which can be large over time) are fetched in one shot and filtered
+// client-side for rendering — simpler than per-type round trips.
+let benchTypes = [];        // user's enabled types
+let benchMasterList = [];   // built-in catalog (from backend constant)
+let benchEntries = [];      // all entries, newest first
+let benchExpanded = {};     // typeId -> true/false (history collapsed state)
+
+async function loadBenchmarkTab() {
+  // Defaults on entry form
+  document.getElementById('benchDate').value = localDate();
+  document.getElementById('benchTime').value = localTime();
+
+  // Fetch master list once and cache in localStorage — it doesn't change
+  // between deployments, and this saves a round-trip on tab switches.
+  if (!benchMasterList.length) {
+    const cached = localStorage.getItem('ft_bench_master');
+    if (cached) {
+      try { benchMasterList = JSON.parse(cached); } catch(e) { benchMasterList = []; }
+    }
+    if (!benchMasterList.length) {
+      const res = await api('getBenchmarkMasterList');
+      if (res && Array.isArray(res.types)) {
+        benchMasterList = res.types;
+        localStorage.setItem('ft_bench_master', JSON.stringify(benchMasterList));
+      }
+    }
+  }
+
+  // Always refresh tracked types + entries — these change as the user logs
+  const typesRes = await api('getBenchmarkTypes');
+  benchTypes = Array.isArray(typesRes) ? typesRes : [];
+  const entriesRes = await api('getBenchmarks', { limit: 500 });
+  benchEntries = Array.isArray(entriesRes) ? entriesRes : [];
+
+  renderBenchTypeDropdown();
+  renderBenchCards();
+}
+
+function renderBenchTypeDropdown() {
+  const sel = document.getElementById('benchType');
+  const prev = sel.value; // preserve selection across re-renders if possible
+  sel.innerHTML = '<option value="">Select benchmark…</option>';
+  if (!benchTypes.length) {
+    sel.innerHTML += '<option value="" disabled>No types tracked yet — tap Manage types</option>';
+  } else {
+    // Group by category for easier scanning
+    const byCat = {};
+    benchTypes.forEach(t => {
+      const cat = t.category || 'Custom';
+      if (!byCat[cat]) byCat[cat] = [];
+      byCat[cat].push(t);
+    });
+    // Stable category order (matches master list grouping convention)
+    const CATEGORY_ORDER = ['Upper Body','Lower Body','Core','Cardio','Flexibility','Custom'];
+    CATEGORY_ORDER.forEach(cat => {
+      if (!byCat[cat]) return;
+      const og = document.createElement('optgroup');
+      og.label = cat;
+      byCat[cat].forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.typeId;
+        opt.textContent = t.name;
+        opt.dataset.unit = t.unit || '';
+        og.appendChild(opt);
+      });
+      sel.appendChild(og);
+    });
+  }
+  // Restore prior selection (only if still valid)
+  if (prev && benchTypes.some(t => t.typeId === prev)) sel.value = prev;
+  updateBenchUnitLabel();
+}
+
+function updateBenchUnitLabel() {
+  const sel = document.getElementById('benchType');
+  const typeId = sel.value;
+  const type = benchTypes.find(t => t.typeId === typeId);
+  document.getElementById('benchUnit').textContent = type ? (type.unit || '—') : '—';
+}
+
+document.getElementById('benchType').addEventListener('change', updateBenchUnitLabel);
+
+document.getElementById('btnSaveBench').addEventListener('click', async () => {
+  const type = document.getElementById('benchType').value;
+  const value = document.getElementById('benchValue').value;
+  if (!type) return alert('Pick a benchmark type');
+  if (!value) return alert('Enter a value');
+  const params = {
+    type,
+    value: parseFloat(value),
+    date: document.getElementById('benchDate').value,
+    time: document.getElementById('benchTime').value,
+    notes: document.getElementById('benchNotes').value.trim()
+  };
+  await api('saveBenchmark', params);
+  // Clear value + notes (but keep type/date/time selected for quick repeat entry)
+  document.getElementById('benchValue').value = '';
+  document.getElementById('benchNotes').value = '';
+  await loadBenchmarkTab();
+});
+
+// Render one card per tracked type, each showing PR + latest + collapsible history.
+// PR direction respects the type's direction: 'higher' picks max value,
+// 'lower' picks min value (for run times, etc.).
+function renderBenchCards() {
+  const container = document.getElementById('benchCards');
+  container.innerHTML = '';
+
+  if (!benchTypes.length) {
+    container.innerHTML = `<div class="bench-empty">
+      No benchmark types tracked yet.<br>
+      Tap <strong>⚙ Manage types</strong> above to pick some.
+    </div>`;
+    return;
+  }
+
+  // Preserve the user's configured order (as stored in the sheet)
+  benchTypes.forEach(type => {
+    const typeEntries = benchEntries.filter(e => e.Type === type.typeId);
+    const card = document.createElement('div');
+    card.className = 'bench-card';
+
+    // Compute PR (null if no entries)
+    let pr = null, prEntry = null;
+    if (typeEntries.length) {
+      const sorted = typeEntries.slice().sort((a, b) => {
+        return type.direction === 'lower'
+          ? parseFloat(a.Value) - parseFloat(b.Value)
+          : parseFloat(b.Value) - parseFloat(a.Value);
+      });
+      prEntry = sorted[0];
+      pr = parseFloat(prEntry.Value);
+    }
+
+    // Latest entry (by date+time) — always the first in benchEntries since it's sorted desc
+    const latest = typeEntries[0]; // benchEntries is already sorted newest-first
+    const unit = type.unit || '';
+
+    const prHtml = pr !== null
+      ? `<div class="bench-card-pr">🏆 ${formatBenchValue(pr, unit)}</div>`
+      : `<div class="bench-card-pr no-pr">No entries</div>`;
+    const latestHtml = latest
+      ? `<div class="bench-card-meta">Latest: ${latest.Date} · ${formatBenchValue(latest.Value, unit)}</div>`
+      : '';
+    const countHtml = typeEntries.length
+      ? `<div class="bench-card-meta" style="margin-top:2px">${typeEntries.length} ${typeEntries.length === 1 ? 'entry' : 'entries'} · tap to expand</div>`
+      : '';
+
+    card.innerHTML = `
+      <div class="bench-card-header" data-type="${type.typeId}">
+        <div style="flex:1;min-width:0">
+          <div class="bench-card-title">${escapeHtml(type.name)}</div>
+          ${latestHtml}
+          ${countHtml}
+        </div>
+        ${prHtml}
+      </div>
+      <div class="bench-history ${benchExpanded[type.typeId] ? 'open' : ''}" data-type="${type.typeId}"></div>
+    `;
+
+    // Expand/collapse
+    card.querySelector('.bench-card-header').addEventListener('click', () => {
+      benchExpanded[type.typeId] = !benchExpanded[type.typeId];
+      const body = card.querySelector('.bench-history');
+      body.classList.toggle('open', benchExpanded[type.typeId]);
+      if (benchExpanded[type.typeId]) renderBenchHistory(body, type, typeEntries, prEntry);
+    });
+
+    // Pre-render if expanded
+    if (benchExpanded[type.typeId]) {
+      renderBenchHistory(card.querySelector('.bench-history'), type, typeEntries, prEntry);
+    }
+
+    container.appendChild(card);
+  });
+}
+
+function renderBenchHistory(container, type, entries, prEntry) {
+  container.innerHTML = '';
+  if (!entries.length) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--text3);padding:6px 0">No entries yet.</div>';
+    return;
+  }
+  // Show up to 20 most recent (more than that, user can check the sheet)
+  entries.slice(0, 20).forEach(e => {
+    const isPR = prEntry && e._rowIndex === prEntry._rowIndex;
+    const row = document.createElement('div');
+    row.className = 'bench-entry';
+    const prMark = isPR ? '<span class="bench-entry-pr-mark" title="Personal record">PR</span>' : '';
+    row.innerHTML = `
+      <span class="bench-entry-date">${e.Date}${e.Time ? ' ' + e.Time : ''}</span>
+      <span class="bench-entry-val">${formatBenchValue(e.Value, type.unit || '')} ${prMark}</span>
+      ${e.Notes ? `<span class="bench-entry-notes" title="${escapeHtml(e.Notes)}">${escapeHtml(e.Notes)}</span>` : ''}
+      <span class="delete-x" data-row="${e._rowIndex}">×</span>
+    `;
+    row.querySelector('.delete-x').addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      if (!confirm('Delete this entry?')) return;
+      await api('deleteBenchmark', { rowIndex: parseInt(e._rowIndex) });
+      await loadBenchmarkTab();
+    });
+    container.appendChild(row);
+  });
+}
+
+// Format value appropriately for its unit. Seconds get mm:ss; others get
+// the raw number + unit.
+function formatBenchValue(val, unit) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return String(val);
+  if (unit === 'seconds' && n >= 60) {
+    const m = Math.floor(n / 60);
+    const s = Math.round(n - m * 60);
+    return `${m}:${String(s).padStart(2,'0')}`;
+  }
+  // Strip trailing .0 for integer-valued reps/levels
+  const displayed = (n % 1 === 0) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '');
+  return `${displayed} ${unit}`.trim();
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// --- BENCHMARK PICKER MODAL ---
+
+document.getElementById('btnManageBench').addEventListener('click', openBenchPicker);
+document.getElementById('btnOpenBenchPickerFromProfile').addEventListener('click', async () => {
+  closeModal('profileModal');
+  // Small delay so the close animation doesn't feel abrupt when the next modal opens
+  setTimeout(openBenchPicker, 50);
+});
+
+async function openBenchPicker() {
+  // Ensure master list + current tracked types are loaded (we may be coming from
+  // the profile modal before the bench tab has ever rendered)
+  if (!benchMasterList.length) {
+    const res = await api('getBenchmarkMasterList');
+    if (res && Array.isArray(res.types)) {
+      benchMasterList = res.types;
+      localStorage.setItem('ft_bench_master', JSON.stringify(benchMasterList));
+    }
+  }
+  const typesRes = await api('getBenchmarkTypes');
+  benchTypes = Array.isArray(typesRes) ? typesRes : [];
+  renderBenchPicker();
+  openModal('benchPickerModal');
+}
+
+function renderBenchPicker() {
+  const container = document.getElementById('benchPickerList');
+  container.innerHTML = '';
+  const enabledIds = new Set(benchTypes.map(t => t.typeId));
+
+  // Group master list by category
+  const byCat = {};
+  benchMasterList.forEach(t => {
+    if (!byCat[t.category]) byCat[t.category] = [];
+    byCat[t.category].push(t);
+  });
+
+  const CATEGORY_ORDER = ['Upper Body','Lower Body','Core','Cardio','Flexibility'];
+  CATEGORY_ORDER.forEach(cat => {
+    if (!byCat[cat]) return;
+    const header = document.createElement('div');
+    header.className = 'bench-category-header';
+    header.textContent = cat;
+    container.appendChild(header);
+
+    byCat[cat].forEach(t => {
+      const active = enabledIds.has(t.id);
+      const item = document.createElement('div');
+      item.className = 'bench-picker-item' + (active ? ' active' : '');
+      item.innerHTML = `
+        <div class="bench-picker-check">${active ? '✓' : ''}</div>
+        <div class="bench-picker-info">
+          <div class="bench-picker-name">${escapeHtml(t.name)}</div>
+          <div class="bench-picker-sub">${t.unit} · ${t.direction === 'lower' ? 'lower = better' : 'higher = better'}</div>
+        </div>
+      `;
+      item.addEventListener('click', async () => {
+        // Toggle
+        if (enabledIds.has(t.id)) {
+          await api('deleteBenchmarkType', { typeId: t.id });
+        } else {
+          await api('saveBenchmarkType', { typeId: t.id });
+        }
+        // Refresh picker + main tab state
+        const typesRes = await api('getBenchmarkTypes');
+        benchTypes = Array.isArray(typesRes) ? typesRes : [];
+        renderBenchPicker();
+        // If bench tab is active, keep it in sync
+        if (document.getElementById('tabBenchmark').classList.contains('active')) {
+          renderBenchTypeDropdown();
+          renderBenchCards();
+        }
+      });
+      container.appendChild(item);
+    });
+  });
+
+  // Custom types section (user-defined, not in master list)
+  const customTypes = benchTypes.filter(t =>
+    !benchMasterList.some(m => m.id === t.typeId)
+  );
+  if (customTypes.length) {
+    const header = document.createElement('div');
+    header.className = 'bench-category-header';
+    header.textContent = 'Custom';
+    container.appendChild(header);
+    customTypes.forEach(t => {
+      const item = document.createElement('div');
+      item.className = 'bench-picker-item active';
+      item.innerHTML = `
+        <div class="bench-picker-check">✓</div>
+        <div class="bench-picker-info">
+          <div class="bench-picker-name">${escapeHtml(t.name)}</div>
+          <div class="bench-picker-sub">${escapeHtml(t.unit || '—')} · ${t.direction === 'lower' ? 'lower = better' : 'higher = better'}</div>
+        </div>
+        <span class="bench-picker-del" data-id="${t.typeId}">Remove</span>
+      `;
+      item.querySelector('.bench-picker-del').addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        if (!confirm(`Stop tracking "${t.name}"? Past entries are preserved.`)) return;
+        await api('deleteBenchmarkType', { typeId: t.typeId });
+        const typesRes = await api('getBenchmarkTypes');
+        benchTypes = Array.isArray(typesRes) ? typesRes : [];
+        renderBenchPicker();
+        if (document.getElementById('tabBenchmark').classList.contains('active')) {
+          renderBenchTypeDropdown();
+          renderBenchCards();
+        }
+      });
+      container.appendChild(item);
+    });
+  }
+}
+
+document.getElementById('btnAddCustomBench').addEventListener('click', async () => {
+  const name = document.getElementById('customBenchName').value.trim();
+  const unit = document.getElementById('customBenchUnit').value.trim();
+  const direction = document.getElementById('customBenchDirection').value;
+  if (!name) return alert('Name is required');
+  await api('saveBenchmarkType', {
+    name,
+    unit,
+    direction,
+    category: 'Custom'
+  });
+  // Reset form
+  document.getElementById('customBenchName').value = '';
+  document.getElementById('customBenchUnit').value = '';
+  document.getElementById('customBenchDirection').value = 'higher';
+  // Refresh
+  const typesRes = await api('getBenchmarkTypes');
+  benchTypes = Array.isArray(typesRes) ? typesRes : [];
+  renderBenchPicker();
+  if (document.getElementById('tabBenchmark').classList.contains('active')) {
+    renderBenchTypeDropdown();
+    renderBenchCards();
+  }
 });
 
 // --- EXPORT TAB ---
