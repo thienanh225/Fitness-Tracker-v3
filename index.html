@@ -24,6 +24,7 @@
   --teal: #0d9488; --teal-bg: #e0f5f3;
   --coral: #ef6461; --coral-bg: #fde8e8;
   --pink: #e91e90; --pink-bg: #fce4f0;
+  --indigo: #4f46e5; --indigo-bg: #eef2ff;
   --radius: 12px; --radius-sm: 8px;
   --shadow: 0 1px 3px rgba(0,0,0,0.06);
   --font: 'DM Sans', -apple-system, sans-serif;
@@ -44,6 +45,7 @@
     --teal: #2dd4bf; --teal-bg: #0a2825;
     --coral: #fb7185; --coral-bg: #2a0f14;
     --pink: #f472b6; --pink-bg: #2a0f20;
+    --indigo: #818cf8; --indigo-bg: #161532;
     --shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
 }
@@ -121,11 +123,13 @@ body { padding-top:var(--safe-top); padding-bottom:calc(64px + var(--safe-bottom
 .chip[data-activity="Leg"] { --c:var(--teal); --cbg:var(--teal-bg); }
 .chip[data-activity="Run"] { --c:var(--coral); --cbg:var(--coral-bg); }
 .chip[data-activity="Sport"] { --c:var(--pink); --cbg:var(--pink-bg); }
+.chip[data-activity="Night"] { --c:var(--indigo); --cbg:var(--indigo-bg); }
 .chip:not(.active) { color:var(--text3); }
 .chip:not(.active):hover { border-color:var(--c, var(--text3)); }
 .chip.active { background:var(--c, var(--green)); border-color:var(--c, var(--green)); }
-/* v3: auto-chipped activities (Boulder from Climb, Run from Strava) are
-   read-only — dimmed, no hover, and show a tooltip on tap/long-press. */
+/* v3: auto-chipped activities (Boulder from Climb tab, Run from Strava sync,
+   Night from sleep entry with NightShift toggle) are read-only — dimmed,
+   no hover, and show a tooltip on tap/long-press. */
 .chip.auto-chip { cursor:not-allowed; opacity:0.75; position:relative; }
 .chip.auto-chip::after {
   content:"⟲"; font-size:10px; margin-left:6px; opacity:0.7;
@@ -339,6 +343,49 @@ textarea.form-input { resize:vertical; min-height:60px; }
   font-family:var(--font); color:var(--text3);
 }
 .style-chip.active { background:var(--purple); border-color:var(--purple); color:#fff; }
+
+/* -- SLEEP QUALITY DOTS (v3 Phase 3) -- */
+.quality-row { display:flex; gap:6px; flex:1; }
+.quality-dot {
+  flex:1; text-align:center; padding:8px 0; border-radius:10px;
+  font-size:13px; font-weight:600; border:1.5px solid var(--card-border);
+  background:var(--card); color:var(--text3); cursor:pointer;
+  transition:all 0.15s; user-select:none; font-family:var(--font);
+}
+.quality-dot.active { background:var(--blue); border-color:var(--blue); color:#fff; }
+
+/* -- MOOD PICKER (v3 Phase 3) -- */
+.mood-picker {
+  display:flex; justify-content:space-around; align-items:center;
+  padding:4px 0; gap:4px;
+}
+.mood-emoji {
+  font-size:32px; cursor:pointer; transition:transform 0.15s;
+  filter:grayscale(0.6); opacity:0.6; padding:4px 8px; border-radius:10px;
+  user-select:none;
+}
+.mood-emoji:hover { transform:scale(1.15); filter:grayscale(0); opacity:1; }
+.mood-emoji.active {
+  filter:grayscale(0); opacity:1; transform:scale(1.25);
+  background:var(--bg2);
+}
+
+/* -- iOS-STYLE TOGGLE SWITCH (v3 Phase 3) -- */
+.toggle-switch {
+  position:relative; display:inline-block; width:44px; height:26px; flex-shrink:0;
+}
+.toggle-switch input { opacity:0; width:0; height:0; }
+.toggle-slider {
+  position:absolute; cursor:pointer; inset:0; background:var(--bg2);
+  transition:0.2s; border-radius:26px; border:1px solid var(--card-border);
+}
+.toggle-slider::before {
+  content:""; position:absolute; height:20px; width:20px; left:2px; top:2px;
+  background:#fff; transition:0.2s; border-radius:50%;
+  box-shadow:0 1px 3px rgba(0,0,0,0.2);
+}
+.toggle-switch input:checked + .toggle-slider { background:var(--purple); border-color:var(--purple); }
+.toggle-switch input:checked + .toggle-slider::before { transform:translateX(18px); }
 
 /* --- GYM MANAGEMENT --- */
 .gym-item {
@@ -606,8 +653,10 @@ textarea.form-input { resize:vertical; min-height:60px; }
       <p style="font-size:11px;color:var(--text3);text-align:center">Syncs latest readings. For historical backfill, edit Limits in the Shortcut.</p>
     </div>
     <div class="metric-grid" id="metricGrid"></div>
+
+    <!-- Biometric entry: the pre-v3 single-metric form, unchanged in flow -->
     <div class="card">
-      <div class="card-title">Manual Entry</div>
+      <div class="card-title">Biometric Entry</div>
       <div class="form-row">
         <input class="form-input" id="bodyDate" type="date" style="flex:1">
         <input class="form-input" id="bodyTime" type="time" style="flex:0.8">
@@ -628,6 +677,56 @@ textarea.form-input { resize:vertical; min-height:60px; }
         <button class="btn btn-primary btn-sm" id="btnSaveBody">Save</button>
       </div>
     </div>
+
+    <!-- Sleep entry (v3 Phase 3) -->
+    <div class="card">
+      <div class="card-title">Sleep</div>
+      <div class="form-row">
+        <label style="flex:0.5;font-size:13px;color:var(--text2)">Date</label>
+        <input class="form-input" id="sleepDate" type="date" style="flex:1">
+      </div>
+      <div class="form-row">
+        <label style="flex:0.5;font-size:13px;color:var(--text2)">Bedtime</label>
+        <input class="form-input" id="sleepBedtime" type="time" style="flex:1">
+      </div>
+      <div class="form-row">
+        <label style="flex:0.5;font-size:13px;color:var(--text2)">Wake</label>
+        <input class="form-input" id="sleepWakeTime" type="time" style="flex:1">
+      </div>
+      <div style="font-size:12px;color:var(--text3);text-align:right;margin:-4px 2px 8px" id="sleepDurationPreview">&nbsp;</div>
+      <div class="form-row">
+        <label style="flex:0.5;font-size:13px;color:var(--text2)">Quality</label>
+        <div class="quality-row" id="sleepQualityRow">
+          <span class="quality-dot" data-q="1">1</span>
+          <span class="quality-dot" data-q="2">2</span>
+          <span class="quality-dot" data-q="3">3</span>
+          <span class="quality-dot" data-q="4">4</span>
+          <span class="quality-dot" data-q="5">5</span>
+        </div>
+      </div>
+      <div class="form-row" style="align-items:center">
+        <label style="flex:1;font-size:13px;color:var(--text2)">Night Shift <span style="color:var(--text3);font-size:11px">(auto-marks Night chip)</span></label>
+        <label class="toggle-switch">
+          <input type="checkbox" id="sleepNightShift">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <button class="btn btn-primary btn-block" id="btnSaveSleep" style="margin-top:6px">Save sleep</button>
+    </div>
+
+    <!-- Mood entry (v3 Phase 3) -->
+    <div class="card">
+      <div class="card-title">Mood today</div>
+      <div class="mood-picker" id="moodPicker">
+        <span class="mood-emoji" data-mood="1">😞</span>
+        <span class="mood-emoji" data-mood="2">😕</span>
+        <span class="mood-emoji" data-mood="3">😐</span>
+        <span class="mood-emoji" data-mood="4">🙂</span>
+        <span class="mood-emoji" data-mood="5">😄</span>
+      </div>
+      <p style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">Tap an emoji to log instantly.</p>
+    </div>
+
     <div class="card-title">History</div>
     <div class="history-list" id="bodyHistory"></div>
   </div>
@@ -742,8 +841,8 @@ let dashboardMetrics = ['Weight','WaistToHeight','RHR','BodyFat'];
 let debounceTimers = {};
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const ACTIVITIES = ['Stretch','Boulder','Ring','BW','Leg','Run','Sport'];
-const ACT_KEYS = { Stretch:'Stretch', Boulder:'Boulder', Ring:'Ring', BW:'BW', Leg:'Leg', Run:'Run', Sport:'Sport' };
+const ACTIVITIES = ['Stretch','Boulder','Ring','BW','Leg','Run','Sport','Night'];
+const ACT_KEYS = { Stretch:'Stretch', Boulder:'Boulder', Ring:'Ring', BW:'BW', Leg:'Leg', Run:'Run', Sport:'Sport', Night:'Night' };
 const ALL_METRICS = [
   { id:'Weight', label:'Weight', unit:'kg' },
   { id:'BodyFat', label:'Body Fat', unit:'%' },
@@ -753,8 +852,56 @@ const ALL_METRICS = [
   { id:'RHR', label:'RHR', unit:'bpm' },
   { id:'VO2max', label:'VO2 max', unit:'ml/kg' },
   { id:'HRV', label:'HRV', unit:'ms' },
-  { id:'ChessElo', label:'Chess Elo', unit:'' }
+  { id:'ChessElo', label:'Chess Elo', unit:'' },
+  // v3 Phase 3: sleep + mood. These use custom formatters because their raw
+  // storage values (minutes, 1-5 scale) aren't what you'd want rendered.
+  { id:'SleepDuration', label:'Sleep', unit:'',
+    format: v => formatSleepDuration(v) },
+  { id:'SleepQuality',  label:'Sleep Qual.', unit:'/5',
+    format: v => v ? `${v}/5` : '' },
+  { id:'Mood',          label:'Mood', unit:'',
+    format: v => MOOD_EMOJIS[parseInt(v) - 1] || '' }
 ];
+
+// Emoji scale for 1..5 mood
+const MOOD_EMOJIS = ['😞','😕','😐','🙂','😄'];
+
+// Convert a duration in minutes (e.g. 465) to "7h 45m".
+// Accepts either minutes-as-number or HH:mm string for robustness.
+function formatSleepDuration(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  let mins = (typeof v === 'number') ? v : parseInt(v);
+  if (!mins || isNaN(mins) || mins <= 0) {
+    // Maybe it's an HH:mm string from somewhere
+    const m = String(v).match(/^(\d{1,2}):(\d{2})/);
+    if (m) mins = parseInt(m[1]) * 60 + parseInt(m[2]);
+    else return '';
+  }
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+}
+
+// Compute duration in minutes from two HH:mm strings, handling midnight cross.
+// Mirrors computeSleepDurationMin() on the backend — UI can show a live
+// preview as the user types without waiting on a round-trip.
+function computeSleepMinsClient(bed, wake) {
+  const b = hhmmToMinClient(bed);
+  const w = hhmmToMinClient(wake);
+  if (b === null || w === null) return null;
+  let diff = w - b;
+  if (diff <= 0) diff += 24 * 60;
+  return diff;
+}
+
+function hhmmToMinClient(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const h = parseInt(m[1]), mm = parseInt(m[2]);
+  if (isNaN(h) || isNaN(mm)) return null;
+  return h * 60 + mm;
+}
 
 // --- API ---
 async function api(action, params = {}) {
@@ -965,7 +1112,8 @@ function renderDayGrid() {
     const dayData = weekHabits[d] || {};
     const dots = ACTIVITIES.filter(a => dayData[a]).map(a => {
       const colors = { Stretch:'var(--green)', Boulder:'var(--purple)', Ring:'var(--blue)',
-        BW:'var(--amber)', Leg:'var(--teal)', Run:'var(--coral)', Sport:'var(--pink)' };
+        BW:'var(--amber)', Leg:'var(--teal)', Run:'var(--coral)', Sport:'var(--pink)',
+        Night:'var(--indigo)' };
       return `<div class="day-dot" style="background:${colors[a]}"></div>`;
     }).join('');
     const isToday = dateStr === localDate();
@@ -990,11 +1138,13 @@ function renderSelectedDay() {
   const dayData = weekHabits[day] || {};
 
   // Chips
-  // v3: Boulder is auto-marked from the Climb tab, Run is auto-marked from Strava syncs.
-  // Render them as read-only ("auto-chip") — tooltip explains the source.
+  // v3: Boulder is auto-marked from the Climb tab, Run is auto-marked from
+  // Strava syncs, and Night is auto-marked from the Body tab's sleep entry
+  // (when NightShift is toggled on). All three render read-only here.
   const AUTO_CHIP_SOURCES = {
     Boulder: 'Auto-logged from Climb tab',
-    Run: 'Auto-logged from Strava'
+    Run: 'Auto-logged from Strava',
+    Night: 'Auto-logged from Body tab · sleep entry'
   };
   const chipRow = document.getElementById('habitChips');
   chipRow.innerHTML = '';
@@ -1026,8 +1176,10 @@ function renderSelectedDay() {
     });
   });
 
-  // Show detail panel if any training chip is active
-  const hasTraining = ACTIVITIES.some(a => a !== 'Stretch' && dayData[a]);
+  // Show detail panel if any training chip is active.
+  // Stretch is not "training" for this purpose (no exercise detail to add),
+  // and Night is a circumstantial flag (sleep-entry-driven), not training.
+  const hasTraining = ACTIVITIES.some(a => a !== 'Stretch' && a !== 'Night' && dayData[a]);
   const detailPanel = document.getElementById('detailPanel');
   detailPanel.style.display = hasTraining ? 'block' : 'none';
   if (hasTraining) renderDetailList(day);
@@ -1035,7 +1187,9 @@ function renderSelectedDay() {
   // Populate activity dropdown for details
   const actSelect = document.getElementById('detailActivity');
   actSelect.innerHTML = '<option value="">Activity</option>';
-  ACTIVITIES.filter(a => a !== 'Stretch' && dayData[a]).forEach(a => {
+  // Populate activity dropdown for details.
+  // Exclude Stretch (no reps/sets) and Night (not a training activity).
+  ACTIVITIES.filter(a => a !== 'Stretch' && a !== 'Night' && dayData[a]).forEach(a => {
     actSelect.innerHTML += `<option value="${a}">${a}</option>`;
   });
 
@@ -1112,11 +1266,14 @@ document.getElementById('btnAddDetail').addEventListener('click', async () => {
 function renderHabitsStats() {
   const week = getWeekString(currentWeekOffset);
   let stretchDays = 0, trainingSessions = 0, weeklyScore = 0;
+  // v3: Night is a circumstantial flag (from NightShift on sleep entries),
+  // not a training session — exclude it from session count and score.
+  const TRAINING_ACTIVITIES = ACTIVITIES.filter(a => a !== 'Stretch' && a !== 'Night');
   DAYS.forEach(d => {
     const data = weekHabits[d] || {};
     if (data.Stretch) { stretchDays++; weeklyScore += 1; }
-    ACTIVITIES.forEach(a => {
-      if (a !== 'Stretch' && data[a]) { trainingSessions++; weeklyScore += 2; }
+    TRAINING_ACTIVITIES.forEach(a => {
+      if (data[a]) { trainingSessions++; weeklyScore += 2; }
     });
     if (data.Boulder) {
       const details = weekDetails.filter(dd => dd.Week === week && dd.Day === d && dd.Activity === 'Boulder');
@@ -1124,7 +1281,7 @@ function renderHabitsStats() {
     }
   });
 
-  const maxScore = 7 + (ACTIVITIES.length - 1) * 7 * 2 + 7; // theoretical max ~98
+  const maxScore = 7 + TRAINING_ACTIVITIES.length * 7 * 2 + 7; // theoretical max
   const pct = Math.min(100, Math.round((weeklyScore / 30) * 100)); // scaled to 30 as "great week"
 
   document.getElementById('habitsStats').innerHTML = `
@@ -1492,9 +1649,26 @@ async function showRunDetail(run) {
 }
 
 // --- BODY TAB ---
+// Per-session UI state for the sleep + mood sub-cards. Kept outside the
+// render functions so taps on the dots/emoji can be read back at save time.
+let sleepDraftQuality = 0;   // 1..5, 0 = unset
+let moodSaving = false;      // guard against double-tap when the API is slow
+
 async function loadBodyTab() {
+  // Biometric entry defaults
   document.getElementById('bodyDate').value = localDate();
   document.getElementById('bodyTime').value = localTime();
+  // Sleep entry: default to today; bedtime/wake left blank so user fills in
+  document.getElementById('sleepDate').value = localDate();
+  document.getElementById('sleepBedtime').value = '';
+  document.getElementById('sleepWakeTime').value = '';
+  document.getElementById('sleepNightShift').checked = false;
+  setSleepQuality(0);
+  updateSleepDurationPreview();
+  // Mood: clear any prior selection highlight (it's an instant-save picker,
+  // so there's no pending state to persist across tab switches)
+  document.querySelectorAll('#moodPicker .mood-emoji').forEach(e => e.classList.remove('active'));
+
   const measurements = await api('getMeasurements', { limit: 100 });
   if (measurements && Array.isArray(measurements)) {
     localStorage.setItem('ft_body', JSON.stringify(measurements));
@@ -1507,16 +1681,27 @@ async function loadBodyTab() {
   }
 }
 
+// Pick the most recent non-empty value for a field across all rows.
+// Sleep/mood and biometrics are often on different rows, so "latest" per
+// field gives a more useful dashboard than picking the top row wholesale.
+function latestValueFor(data, id) {
+  for (const r of data) {
+    if (r[id] !== '' && r[id] !== null && r[id] !== undefined) return r[id];
+  }
+  return '';
+}
+
 function renderBodyDashboard(data) {
-  const latest = data.length ? data[0] : {};
   const grid = document.getElementById('metricGrid');
   grid.innerHTML = '';
   dashboardMetrics.forEach(id => {
     const m = ALL_METRICS.find(x => x.id === id);
     if (!m) return;
-    const val = latest[id] || '—';
+    const raw = latestValueFor(data, id);
+    const display = m.format ? (m.format(raw) || '—') : (raw !== '' ? raw : '—');
+    const unit = m.format ? '' : m.unit;
     grid.innerHTML += `<div class="metric-card">
-      <div class="metric-val">${val}<span class="metric-unit"> ${m.unit}</span></div>
+      <div class="metric-val">${display}${unit ? `<span class="metric-unit"> ${unit}</span>` : ''}</div>
       <div class="metric-label">${m.label}</div>
     </div>`;
   });
@@ -1526,7 +1711,23 @@ function renderBodyHistory(data) {
   const container = document.getElementById('bodyHistory');
   container.innerHTML = '';
   data.slice(0, 50).forEach(r => {
-    const vals = ALL_METRICS.map(m => r[m.id] ? `${m.label}: ${r[m.id]}` : '').filter(Boolean).join(' · ');
+    // Build parts with formatters where applicable
+    const parts = ALL_METRICS.map(m => {
+      const v = r[m.id];
+      if (v === '' || v === null || v === undefined) return '';
+      if (m.format) {
+        const s = m.format(v);
+        return s ? `${m.label}: ${s}` : '';
+      }
+      return `${m.label}: ${v}`;
+    }).filter(Boolean);
+
+    // Append a subtle Night Shift badge if flagged (NightShift isn't in
+    // ALL_METRICS because it's a flag, not a measurement — it annotates the
+    // sleep row rather than standing alone)
+    if (r.NightShift == 1) parts.push('🌙 Night shift');
+
+    const vals = parts.join(' · ');
     if (!vals) return;
     const sourceIcon = r.Source === 'AppleHealth' ? '♥ ' : '';
     const timeStr = r.Time ? ' · ' + r.Time : '';
@@ -1543,6 +1744,7 @@ function renderBodyHistory(data) {
   });
 }
 
+// --- Biometric entry (pre-existing single-metric form) ---
 document.getElementById('btnSaveBody').addEventListener('click', async () => {
   const metric = document.getElementById('bodyMetric').value;
   const value = document.getElementById('bodyValue').value;
@@ -1560,6 +1762,92 @@ document.getElementById('btnSaveBody').addEventListener('click', async () => {
 
 document.getElementById('btnSyncHealth').addEventListener('click', () => {
   window.location.href = 'shortcuts://run-shortcut?name=Fitness%20Sync';
+});
+
+// --- Sleep entry (v3 Phase 3) ---
+function setSleepQuality(q) {
+  sleepDraftQuality = q;
+  document.querySelectorAll('#sleepQualityRow .quality-dot').forEach(dot => {
+    dot.classList.toggle('active', parseInt(dot.dataset.q) === q);
+  });
+}
+document.querySelectorAll('#sleepQualityRow .quality-dot').forEach(dot => {
+  dot.addEventListener('click', () => setSleepQuality(parseInt(dot.dataset.q)));
+});
+
+function updateSleepDurationPreview() {
+  const bed = document.getElementById('sleepBedtime').value;
+  const wake = document.getElementById('sleepWakeTime').value;
+  const el = document.getElementById('sleepDurationPreview');
+  const mins = computeSleepMinsClient(bed, wake);
+  el.innerHTML = mins ? `Duration: <strong>${formatSleepDuration(mins)}</strong>` : '&nbsp;';
+}
+document.getElementById('sleepBedtime').addEventListener('change', updateSleepDurationPreview);
+document.getElementById('sleepWakeTime').addEventListener('change', updateSleepDurationPreview);
+
+document.getElementById('btnSaveSleep').addEventListener('click', async () => {
+  const date = document.getElementById('sleepDate').value;
+  const bedtime = document.getElementById('sleepBedtime').value;
+  const wakeTime = document.getElementById('sleepWakeTime').value;
+  const nightShift = document.getElementById('sleepNightShift').checked;
+
+  if (!date) {
+    alert('Date is required.');
+    return;
+  }
+  if (!bedtime && !wakeTime && !sleepDraftQuality && !nightShift) {
+    alert('Enter at least one sleep field (bedtime, wake, quality, or night shift).');
+    return;
+  }
+
+  const btn = document.getElementById('btnSaveSleep');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    await api('saveMeasurement', {
+      Date: date,
+      Bedtime: bedtime || '',
+      WakeTime: wakeTime || '',
+      SleepQuality: sleepDraftQuality || '',
+      NightShift: nightShift ? 1 : 0,
+      Source: 'Manual'
+    });
+    // If night-shift was ticked, the backend has already flipped the Night
+    // chip on the Habits tab — refresh that cache so a subsequent tab switch
+    // doesn't show stale state.
+    if (nightShift) localStorage.removeItem('ft_habits');
+    btn.textContent = '✓ Saved';
+    setTimeout(() => { btn.textContent = 'Save sleep'; btn.disabled = false; }, 1200);
+    loadBodyTab();
+  } catch(err) {
+    btn.textContent = 'Save sleep';
+    btn.disabled = false;
+    alert('Failed to save sleep: ' + err.message);
+  }
+});
+
+// --- Mood entry (v3 Phase 3): tap-to-save, no separate button ---
+document.querySelectorAll('#moodPicker .mood-emoji').forEach(el => {
+  el.addEventListener('click', async () => {
+    if (moodSaving) return;
+    const mood = parseInt(el.dataset.mood);
+    moodSaving = true;
+    // Optimistic highlight
+    document.querySelectorAll('#moodPicker .mood-emoji').forEach(e => e.classList.remove('active'));
+    el.classList.add('active');
+    try {
+      await api('saveMeasurement', {
+        Date: localDate(),
+        Mood: mood,
+        Source: 'Manual'
+      });
+      loadBodyTab();
+    } catch(err) {
+      alert('Failed to save mood: ' + err.message);
+    } finally {
+      moodSaving = false;
+    }
+  });
 });
 
 // --- BENCHMARK TAB (v3 Phase 2) ---
@@ -1942,7 +2230,8 @@ async function generateExport(weeks) {
   let stretchDays = 0, sessions = 0;
   habits.forEach(h => {
     if (h.Stretch == 1) stretchDays++;
-    ACTIVITIES.forEach(a => { if (a !== 'Stretch' && h[a] == 1) sessions++; });
+    // Night is a circumstantial flag (sleep entry), not a training session
+    ACTIVITIES.forEach(a => { if (a !== 'Stretch' && a !== 'Night' && h[a] == 1) sessions++; });
   });
   md += `- Stretch days: ${stretchDays}\n- Training sessions: ${sessions}\n`;
 
@@ -1993,8 +2282,29 @@ async function generateExport(weeks) {
   const body = data.latestBody || {};
   md += `\n## Biometrics (latest)\n`;
   ALL_METRICS.forEach(m => {
+    // Skip sleep/mood here — they get their own section below with richer
+    // data (averages over the window, not just the latest value).
+    if (m.id === 'SleepDuration' || m.id === 'SleepQuality' || m.id === 'Mood') return;
     if (body[m.id]) md += `- ${m.label}: ${body[m.id]} ${m.unit}\n`;
   });
+
+  // Sleep + mood summary (v3 Phase 3) — uses window aggregates when available
+  const sleep = data.sleepSummary;
+  const mood = data.moodSummary;
+  if (sleep || mood) {
+    md += `\n## Sleep & Mood\n`;
+    if (sleep) {
+      const avgDur = sleep.avgDurationMin ? formatSleepDuration(sleep.avgDurationMin) : '—';
+      md += `- Nights logged: ${sleep.nights}\n`;
+      md += `- Avg sleep: ${avgDur}\n`;
+      if (sleep.avgQuality) md += `- Avg sleep quality: ${sleep.avgQuality}/5\n`;
+      if (sleep.nightShiftCount) md += `- Night-shift nights: ${sleep.nightShiftCount} (disruption flagged)\n`;
+    }
+    if (mood) {
+      md += `- Mood entries: ${mood.entries}\n`;
+      if (mood.avgMood) md += `- Avg mood: ${mood.avgMood}/5 ${MOOD_EMOJIS[Math.round(mood.avgMood) - 1] || ''}\n`;
+    }
+  }
 
   md += `\n---\nBased on this data and my fitness profile, what should I adjust?\n`;
 
