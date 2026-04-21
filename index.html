@@ -257,12 +257,36 @@ textarea.form-input { resize:vertical; min-height:60px; }
 .radar-stat {
   text-align:center; padding:6px;
   border-radius:var(--radius-sm); background:var(--bg2);
+  cursor:pointer; transition:background 0.15s;
 }
+.radar-stat:active { background:var(--card-border); }
+.radar-stat.active { background:var(--card-border); outline:1px solid var(--text3); }
 .radar-stat-name { font-size:10px; font-weight:600; color:var(--text3); text-transform:uppercase; }
 .radar-stat-val { font-size:16px; font-weight:700; font-family:var(--mono); margin:2px 0; }
 .radar-stat-diff { font-size:10px; font-family:var(--mono); }
 .radar-stat-diff.positive { color:var(--green); }
 .radar-stat-diff.negative { color:var(--coral); }
+
+/* v3 Phase 4: tap a radar-stat tile to reveal its metric breakdown */
+.radar-breakdown {
+  margin-top:10px; padding:10px 12px;
+  background:var(--bg2); border-radius:var(--radius-sm);
+  border:1px solid var(--card-border);
+  font-size:12px;
+}
+.radar-breakdown-title {
+  font-weight:600; font-size:11px;
+  color:var(--text3); text-transform:uppercase;
+  margin-bottom:6px; letter-spacing:0.5px;
+}
+.radar-breakdown-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:3px 0; font-family:var(--mono); font-size:11px;
+}
+.radar-breakdown-row .rb-name { color:var(--text2); }
+.radar-breakdown-row .rb-val { font-weight:700; }
+.radar-breakdown-row .rb-val.missing { color:var(--text3); font-weight:400; font-style:italic; }
+.radar-breakdown-row .rb-weight { color:var(--text3); font-size:10px; margin-left:6px; }
 
 /* --- CLIMB TAB --- */
 .route-pill {
@@ -324,6 +348,108 @@ textarea.form-input { resize:vertical; min-height:60px; }
 }
 .modal-sheet h3 { font-size:18px; font-weight:700; margin-bottom:16px; }
 .modal-close { float:right; background:none; border:none; font-size:24px; cursor:pointer; color:var(--text); }
+
+/* v3 Phase 5: PHQ-9 / GAD-7 questionnaire flow */
+.mental-card-actions {
+  display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:6px;
+}
+.mental-disclaimer {
+  font-size:11px; color:var(--text3); line-height:1.5;
+  margin-top:10px; padding:8px 10px;
+  background:var(--bg2); border-radius:var(--radius-sm);
+  border-left:3px solid var(--text3);
+}
+.mental-history { margin-top:12px; }
+.mental-history-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 10px; border-radius:var(--radius-sm);
+  background:var(--bg2); margin-bottom:4px;
+  font-size:12px;
+}
+.mental-history-row .mh-meta { color:var(--text3); font-family:var(--mono); font-size:11px; }
+.mental-history-row .mh-score { font-weight:700; font-family:var(--mono); }
+.mental-history-row .mh-sev {
+  font-size:10px; text-transform:uppercase; font-weight:600; letter-spacing:0.5px;
+  padding:2px 6px; border-radius:8px; margin-left:6px;
+}
+.mh-sev.minimal { background:var(--green-bg); color:var(--green); }
+.mh-sev.mild    { background:var(--blue-bg, rgba(100,150,200,0.15)); color:var(--blue, #4a90d9); }
+.mh-sev.moderate{ background:var(--amber-bg); color:var(--amber); }
+.mh-sev.severe  { background:var(--coral-bg, rgba(220,100,100,0.15)); color:var(--coral); }
+
+/* Questionnaire modal body */
+.q-progress {
+  font-size:11px; color:var(--text3); font-family:var(--mono);
+  text-align:center; margin-bottom:10px; letter-spacing:0.5px;
+}
+.q-progress-bar {
+  height:3px; background:var(--bg2); border-radius:2px;
+  overflow:hidden; margin-bottom:16px;
+}
+.q-progress-fill {
+  height:100%; background:var(--green);
+  transition:width 0.3s;
+}
+.q-prompt {
+  font-size:12px; color:var(--text3);
+  margin-bottom:10px; line-height:1.5;
+}
+.q-question {
+  font-size:15px; font-weight:600; color:var(--text);
+  line-height:1.4; margin-bottom:16px;
+  min-height:3em;
+}
+.q-options { display:flex; flex-direction:column; gap:6px; margin-bottom:20px; }
+.q-option {
+  display:flex; align-items:center; gap:10px;
+  padding:12px 14px;
+  background:var(--bg2); border:2px solid transparent;
+  border-radius:var(--radius-sm);
+  font-size:14px; cursor:pointer;
+  transition:border-color 0.15s, background 0.15s;
+}
+.q-option:active { background:var(--card-border); }
+.q-option.selected {
+  border-color:var(--green); background:var(--green-bg);
+}
+.q-option-num {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border-radius:50%;
+  background:var(--card); color:var(--text2);
+  font-family:var(--mono); font-size:12px; font-weight:700;
+  flex-shrink:0;
+}
+.q-option.selected .q-option-num { background:var(--green); color:#fff; }
+.q-nav { display:flex; gap:8px; margin-top:8px; }
+.q-nav .btn { flex:1; }
+
+/* Result view */
+.q-result-score {
+  text-align:center; padding:24px 0 12px;
+}
+.q-result-num {
+  font-size:48px; font-weight:800; font-family:var(--mono);
+  color:var(--green); line-height:1;
+}
+.q-result-max { font-size:20px; color:var(--text3); }
+.q-result-sev {
+  display:inline-block; margin-top:8px;
+  font-size:12px; text-transform:uppercase; font-weight:700; letter-spacing:1px;
+  padding:4px 12px; border-radius:12px;
+}
+.q-result-breakdown {
+  margin-top:12px; padding:10px; background:var(--bg2);
+  border-radius:var(--radius-sm); font-size:11px; color:var(--text2);
+  line-height:1.6;
+}
+.q-support {
+  margin-top:14px; padding:12px 14px;
+  background:var(--bg2); border-radius:var(--radius-sm);
+  border-left:3px solid var(--green);
+  font-size:13px; line-height:1.5;
+}
+.q-support strong { display:block; margin-bottom:4px; }
+.q-support a { color:var(--green); text-decoration:underline; word-break:break-all; }
 
 /* --- EXPORT --- */
 .export-preview {
@@ -486,6 +612,7 @@ textarea.form-input { resize:vertical; min-height:60px; }
     <div class="radar-body" id="radarBody">
       <canvas id="radarCanvas" width="300" height="260" style="width:100%;max-height:260px;"></canvas>
       <div class="radar-stats-grid" id="radarStatsGrid"></div>
+      <div class="radar-breakdown" id="radarBreakdown" style="display:none;"></div>
     </div>
   </div>
 
@@ -727,6 +854,26 @@ textarea.form-input { resize:vertical; min-height:60px; }
       <p style="font-size:11px;color:var(--text3);text-align:center;margin-top:6px">Tap an emoji to log instantly.</p>
     </div>
 
+    <!-- Mental Health self-assessments (v3 Phase 5) -->
+    <!-- PHQ-9 and GAD-7 are public-domain screening instruments. Monthly
+         self-check feeds the Mind radar attribute via latestQuestionnaireScore
+         (most recent of each type within the last 90 days). -->
+    <div class="card">
+      <div class="card-title">Mental Health Check-in</div>
+      <p style="font-size:12px;color:var(--text2);margin:-2px 0 10px;line-height:1.5">
+        Monthly self-assessments. Scores feed the <strong>Mind</strong> radar attribute.
+      </p>
+      <div class="mental-card-actions">
+        <button class="btn btn-secondary btn-sm" id="btnPHQ9">Take PHQ-9</button>
+        <button class="btn btn-secondary btn-sm" id="btnGAD7">Take GAD-7</button>
+      </div>
+      <div class="mental-disclaimer">
+        Not a diagnosis. Results are for self-tracking only — consult a healthcare
+        professional for clinical interpretation.
+      </div>
+      <div class="mental-history" id="mentalHistory"></div>
+    </div>
+
     <div class="card-title">History</div>
     <div class="history-list" id="bodyHistory"></div>
   </div>
@@ -821,6 +968,49 @@ textarea.form-input { resize:vertical; min-height:60px; }
   </div>
 </div>
 
+<!-- v3 Phase 5: PHQ-9 / GAD-7 questionnaire modal.
+     Single modal, repurposed for both assessments — the question bank and
+     title are swapped in by startQuestionnaire(). Flow: question screens →
+     result screen. Back / Next buttons handle navigation; last question's
+     Next becomes Submit. Result screen shows score, severity, disclaimer,
+     and (when PHQ-9 Q9 > 0) a supportive message with crisis resources. -->
+<div class="modal-overlay" id="questionnaireModal">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeQuestionnaire()">×</button>
+    <h3 id="qTitle">Assessment</h3>
+
+    <!-- Question view -->
+    <div id="qQuestionView">
+      <div class="q-progress" id="qProgress"></div>
+      <div class="q-progress-bar"><div class="q-progress-fill" id="qProgressFill"></div></div>
+      <div class="q-prompt" id="qPrompt"></div>
+      <div class="q-question" id="qQuestionText"></div>
+      <div class="q-options" id="qOptions"></div>
+      <div class="q-nav">
+        <button class="btn btn-secondary btn-sm" id="qBackBtn">Back</button>
+        <button class="btn btn-primary btn-sm" id="qNextBtn">Next</button>
+      </div>
+    </div>
+
+    <!-- Result view -->
+    <div id="qResultView" style="display:none;">
+      <div class="q-result-score">
+        <span class="q-result-num" id="qResultNum">0</span><span class="q-result-max" id="qResultMax">/27</span>
+        <div><span class="q-result-sev" id="qResultSev">Minimal</span></div>
+      </div>
+      <div class="q-result-breakdown" id="qResultBreakdown"></div>
+      <div class="mental-disclaimer" style="margin-top:12px">
+        This is a self-screening tool, not a diagnosis. If your results concern
+        you, please discuss them with a qualified healthcare professional.
+      </div>
+      <div class="q-support" id="qSupport" style="display:none;"></div>
+      <div class="q-nav" style="margin-top:16px">
+        <button class="btn btn-primary btn-block" onclick="closeQuestionnaire()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // FITNESS TRACKER v2 — FRONTEND
@@ -865,6 +1055,70 @@ const ALL_METRICS = [
 
 // Emoji scale for 1..5 mood
 const MOOD_EMOJIS = ['😞','😕','😐','🙂','😄'];
+
+// ============ v3 Phase 5: PHQ-9 / GAD-7 questionnaire data ============
+// Public-domain screening instruments. Scoring references:
+//   PHQ-9: Kroenke, Spitzer, Williams (2001) J Gen Intern Med 16:606-613
+//   GAD-7: Spitzer, Kroenke, Williams, Löwe (2006) Arch Intern Med 166:1092-7
+// Response scale is identical for both (0-3). Only the prompt and item list differ.
+
+const PHQ_GAD_OPTIONS = [
+  { value: 0, label: 'Not at all' },
+  { value: 1, label: 'Several days' },
+  { value: 2, label: 'More than half the days' },
+  { value: 3, label: 'Nearly every day' }
+];
+
+const PHQ9_QUESTIONS = [
+  'Little interest or pleasure in doing things',
+  'Feeling down, depressed, or hopeless',
+  'Trouble falling or staying asleep, or sleeping too much',
+  'Feeling tired or having little energy',
+  'Poor appetite or overeating',
+  'Feeling bad about yourself — or that you are a failure or have let yourself or your family down',
+  'Trouble concentrating on things, such as reading the newspaper or watching television',
+  'Moving or speaking so slowly that other people could have noticed. Or the opposite — being so fidgety or restless that you have been moving around a lot more than usual',
+  'Thoughts that you would be better off dead, or of hurting yourself in some way'
+];
+
+const GAD7_QUESTIONS = [
+  'Feeling nervous, anxious, or on edge',
+  'Not being able to stop or control worrying',
+  'Worrying too much about different things',
+  'Trouble relaxing',
+  'Being so restless that it is hard to sit still',
+  'Becoming easily annoyed or irritable',
+  'Feeling afraid, as if something awful might happen'
+];
+
+// Severity bucket → CSS class for history pills + result pill. Mirrors the
+// severityLabel() buckets on the backend (Kroenke 2001 / Spitzer 2006).
+function qSeverityBucket(type, score) {
+  if (type === 'PHQ9') {
+    if (score <= 4)  return { label: 'Minimal',             cls: 'minimal' };
+    if (score <= 9)  return { label: 'Mild',                cls: 'mild' };
+    if (score <= 14) return { label: 'Moderate',            cls: 'moderate' };
+    if (score <= 19) return { label: 'Moderately severe',   cls: 'severe' };
+    return               { label: 'Severe',                 cls: 'severe' };
+  }
+  if (type === 'GAD7') {
+    if (score <= 4)  return { label: 'Minimal',  cls: 'minimal' };
+    if (score <= 9)  return { label: 'Mild',     cls: 'mild' };
+    if (score <= 14) return { label: 'Moderate', cls: 'moderate' };
+    return               { label: 'Severe',  cls: 'severe' };
+  }
+  return { label: '', cls: '' };
+}
+
+// Transient per-session questionnaire state. Reset on every startQuestionnaire().
+let qState = {
+  type: null,           // 'PHQ9' | 'GAD7'
+  questions: [],        // current question list
+  answers: [],          // int 0-3 per question, undefined = not answered
+  index: 0,             // current question index
+  submitting: false
+};
+let mentalHistoryCache = [];  // last fetched assessment list
 
 // Convert a duration in minutes (e.g. 465) to "7h 45m".
 // Accepts either minutes-as-number or HH:mm string for robustness.
@@ -1022,13 +1276,46 @@ function updateRadarCollapse() {
 }
 
 let radarChart = null;
+let radarComponents = null;        // last-fetched component breakdown, keyed by attribute
+let activeBreakdownKey = null;     // which radar-stat tile is currently expanded
+
+// Human-readable labels for the per-metric breakdown rows. Keys match the
+// component.name strings returned by getRadarStats in apps_script.js.
+const RADAR_COMPONENT_LABELS = {
+  climbing_grade:    'Max V-grade (90d)',
+  pushups_2min:      'Pushups (2-min)',
+  pullups_max:       'Pullups (max)',
+  vo2max:            'VO2max',
+  best_pace:         'Best pace (any distance)',
+  weekly_mileage:    'Weekly mileage (28d avg)',
+  rhr:               'Resting HR',
+  hrv:               'HRV',
+  flash_rate:        'Flash rate (90d)',
+  dyno_routes:       'Dyno/coordination routes (90d)',
+  slab_tech_routes:  'Slab/technical routes (90d)',
+  stretch_30d:       'Stretch consistency (30d)',
+  body_fat:          'Body fat %',
+  whtr:              'Waist-to-height',
+  bmi:               'BMI (target center)',
+  stretch_streak:    'Stretch streak',
+  weekly_hit:        '≥3 sessions/week (8wk)',
+  sleep:             'Sleep (duration + quality, 14d)',
+  mood:              'Mood avg (14d)',
+  questionnaires:    'PHQ-9 / GAD-7',
+  chess_elo:         'Chess Elo'
+};
+
 async function loadRadar() {
   const data = await api('getRadarStats');
   if (!data || !data.stats) return;
   const stats = data.stats;
   const baselines = data.baselines;
-  const labels = ['Strength','Endurance','Agility','Vitality','Discipline','Mind'];
-  const keys = ['strength','endurance','agility','vitality','discipline','mind'];
+  radarComponents = data.components || {};
+
+  // v3 Phase 4: six attributes — Vitality+Discipline replaced by Physique+Consistency,
+  // and Mind now aggregates sleep/mood/questionnaires/Elo instead of Elo-only.
+  const labels = ['Strength','Endurance','Agility','Physique','Consistency','Mind'];
+  const keys   = ['strength','endurance','agility','physique','consistency','mind'];
   const values = keys.map(k => stats[k] || 0);
   const baseValues = keys.map(k => baselines[k] || 50);
 
@@ -1080,19 +1367,301 @@ async function loadRadar() {
     }
   });
 
-  // Stats grid below radar
+  // Stats grid below radar. Each tile is tappable — tap toggles the breakdown
+  // panel showing the individual metric scores that rolled up into that
+  // attribute. Diff is vs baseline (50 = peer median for that gender+age).
   const grid = document.getElementById('radarStatsGrid');
   grid.innerHTML = '';
   keys.forEach((k, i) => {
     const diff = values[i] - baseValues[i];
     const diffStr = diff >= 0 ? '+' + diff : String(diff);
     const cls = diff >= 0 ? 'positive' : 'negative';
-    grid.innerHTML += `<div class="radar-stat">
+    const isActive = activeBreakdownKey === k ? 'active' : '';
+    grid.innerHTML += `<div class="radar-stat ${isActive}" data-key="${k}" data-label="${labels[i]}">
       <div class="radar-stat-name">${labels[i]}</div>
       <div class="radar-stat-val">${values[i]}</div>
       <div class="radar-stat-diff ${cls}">${diffStr}</div>
     </div>`;
   });
+
+  // Wire up tap-to-expand on each tile
+  grid.querySelectorAll('.radar-stat').forEach(tile => {
+    tile.addEventListener('click', () => {
+      const key = tile.getAttribute('data-key');
+      const label = tile.getAttribute('data-label');
+      if (activeBreakdownKey === key) {
+        // toggle off
+        activeBreakdownKey = null;
+        hideRadarBreakdown();
+      } else {
+        activeBreakdownKey = key;
+        showRadarBreakdown(key, label);
+      }
+      // update active class on tiles
+      grid.querySelectorAll('.radar-stat').forEach(t => {
+        t.classList.toggle('active', t.getAttribute('data-key') === activeBreakdownKey);
+      });
+    });
+  });
+
+  // If a breakdown was open before the reload (e.g. radar refresh on theme
+  // change), re-render it with the fresh component data.
+  if (activeBreakdownKey) {
+    const labelIdx = keys.indexOf(activeBreakdownKey);
+    if (labelIdx >= 0) showRadarBreakdown(activeBreakdownKey, labels[labelIdx]);
+  }
+}
+
+function showRadarBreakdown(key, label) {
+  const box = document.getElementById('radarBreakdown');
+  const comps = (radarComponents && radarComponents[key]) || [];
+  if (!comps.length) {
+    box.style.display = 'none';
+    return;
+  }
+  const rows = comps.map(c => {
+    const niceName = RADAR_COMPONENT_LABELS[c.name] || c.name;
+    const weightPct = Math.round((c.weight || 0) * 100);
+    if (c.score === null || c.score === undefined) {
+      return `<div class="radar-breakdown-row">
+        <span class="rb-name">${niceName}<span class="rb-weight">${weightPct}%</span></span>
+        <span class="rb-val missing">— no data</span>
+      </div>`;
+    }
+    return `<div class="radar-breakdown-row">
+      <span class="rb-name">${niceName}<span class="rb-weight">${weightPct}%</span></span>
+      <span class="rb-val">${c.score}</span>
+    </div>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="radar-breakdown-title">${label} breakdown</div>
+    ${rows}
+  `;
+  box.style.display = '';
+}
+
+function hideRadarBreakdown() {
+  document.getElementById('radarBreakdown').style.display = 'none';
+}
+
+// ============ v3 Phase 5: PHQ-9 / GAD-7 QUESTIONNAIRES ============
+//
+// UX flow:
+//   1. User taps "Take PHQ-9" or "Take GAD-7" on the Body tab
+//   2. Modal opens at question 1 with Back (disabled) / Next (disabled)
+//   3. User taps an answer chip → Next enables
+//   4. Next advances; last question's Next reads "Submit"
+//   5. Submit POSTs saveMentalAssessment, swaps to the result view with
+//      score + severity pill + disclaimer + (optional) support box
+//   6. Done closes the modal and refreshes the Body tab history + radar
+
+function startQuestionnaire(type) {
+  if (type !== 'PHQ9' && type !== 'GAD7') return;
+  qState.type = type;
+  qState.questions = (type === 'PHQ9') ? PHQ9_QUESTIONS : GAD7_QUESTIONS;
+  qState.answers = new Array(qState.questions.length); // all undefined
+  qState.index = 0;
+  qState.submitting = false;
+
+  // Modal chrome
+  document.getElementById('qTitle').textContent =
+    (type === 'PHQ9') ? 'PHQ-9 · Depression Screening' : 'GAD-7 · Anxiety Screening';
+  document.getElementById('qQuestionView').style.display = '';
+  document.getElementById('qResultView').style.display = 'none';
+
+  renderQuestionnaireStep();
+  openModal('questionnaireModal');
+}
+
+function renderQuestionnaireStep() {
+  const n = qState.questions.length;
+  const i = qState.index;
+  const answered = qState.answers[i];
+
+  // Progress header + bar (percent filled = answered questions / total)
+  const answeredCount = qState.answers.filter(a => a !== undefined).length;
+  document.getElementById('qProgress').textContent = `Question ${i + 1} of ${n}`;
+  document.getElementById('qProgressFill').style.width =
+    Math.max(((i + 1) / n) * 100, (answeredCount / n) * 100) + '%';
+
+  // Shared prompt (identical wording for PHQ-9 and GAD-7 per published forms)
+  document.getElementById('qPrompt').textContent =
+    'Over the last 2 weeks, how often have you been bothered by the following problem?';
+
+  document.getElementById('qQuestionText').textContent = qState.questions[i];
+
+  // Render the 4 answer options as tappable chips.
+  const opts = document.getElementById('qOptions');
+  opts.innerHTML = '';
+  PHQ_GAD_OPTIONS.forEach(opt => {
+    const div = document.createElement('div');
+    div.className = 'q-option' + (answered === opt.value ? ' selected' : '');
+    div.innerHTML = `
+      <span class="q-option-num">${opt.value}</span>
+      <span>${opt.label}</span>
+    `;
+    div.addEventListener('click', () => {
+      qState.answers[i] = opt.value;
+      renderQuestionnaireStep(); // re-render to highlight selection
+    });
+    opts.appendChild(div);
+  });
+
+  // Nav buttons
+  const backBtn = document.getElementById('qBackBtn');
+  const nextBtn = document.getElementById('qNextBtn');
+  backBtn.disabled = (i === 0);
+  backBtn.style.opacity = (i === 0) ? '0.4' : '';
+  const isLast = (i === n - 1);
+  nextBtn.textContent = isLast ? 'Submit' : 'Next';
+  // Next only enables once this question has an answer. For Submit, require all answered.
+  const canAdvance = isLast
+    ? qState.answers.every(a => a !== undefined)
+    : (answered !== undefined);
+  nextBtn.disabled = !canAdvance;
+  nextBtn.style.opacity = canAdvance ? '' : '0.5';
+}
+
+// Wire Back / Next once at startup; handlers read from qState live.
+function bindQuestionnaireNav() {
+  document.getElementById('qBackBtn').addEventListener('click', () => {
+    if (qState.index > 0) {
+      qState.index--;
+      renderQuestionnaireStep();
+    }
+  });
+  document.getElementById('qNextBtn').addEventListener('click', async () => {
+    const isLast = qState.index === qState.questions.length - 1;
+    if (!isLast) {
+      qState.index++;
+      renderQuestionnaireStep();
+      return;
+    }
+    // Submit — guard against double-tap
+    if (qState.submitting) return;
+    qState.submitting = true;
+    document.getElementById('qNextBtn').disabled = true;
+    document.getElementById('qNextBtn').textContent = 'Saving…';
+
+    const resp = await api('saveMentalAssessment', {
+      type: qState.type,
+      answers: qState.answers
+    });
+
+    qState.submitting = false;
+    if (!resp || resp.error) {
+      alert('Could not save assessment' + (resp && resp.error ? ': ' + resp.error : '. Check connection.'));
+      document.getElementById('qNextBtn').disabled = false;
+      document.getElementById('qNextBtn').textContent = 'Submit';
+      return;
+    }
+
+    showQuestionnaireResult(resp);
+    // Refresh background state: history + radar both consume the new data
+    loadMentalHistory();
+    loadRadar();
+  });
+}
+
+function showQuestionnaireResult(resp) {
+  const type = qState.type;
+  const score = resp.score;
+  const severity = qSeverityBucket(type, score);
+  const maxScore = (type === 'PHQ9') ? 27 : 21;
+
+  document.getElementById('qQuestionView').style.display = 'none';
+  document.getElementById('qResultView').style.display = '';
+
+  document.getElementById('qResultNum').textContent = score;
+  document.getElementById('qResultMax').textContent = '/' + maxScore;
+  const sevEl = document.getElementById('qResultSev');
+  sevEl.textContent = severity.label;
+  sevEl.className = 'q-result-sev mh-sev ' + severity.cls;
+
+  // Plain-language breakdown helps the user interpret the severity without
+  // over-medicalizing — it's a self-check, not a diagnosis.
+  const threshold = type === 'PHQ9' ? 10 : 10;
+  const breakdownLines = [
+    `<strong>${type === 'PHQ9' ? 'PHQ-9' : 'GAD-7'} score:</strong> ${score} out of ${maxScore}`,
+    `<strong>Severity bucket:</strong> ${severity.label}`
+  ];
+  if (score >= threshold) {
+    breakdownLines.push(
+      `A score of ${threshold} or higher often prompts a follow-up conversation with a clinician.`
+    );
+  }
+  document.getElementById('qResultBreakdown').innerHTML =
+    breakdownLines.map(l => `<div>${l}</div>`).join('');
+
+  // PHQ-9 Q9 (self-harm/suicidal ideation) check. Show a calm, non-alarming
+  // supportive note any time the answer was above 0, independent of total score.
+  // This is the one item where any non-zero answer warrants surfacing help
+  // resources — standard practice for PHQ-9 administration.
+  const support = document.getElementById('qSupport');
+  const flags = (resp.flags || []);
+  if (flags.indexOf('phq9_q9_positive') >= 0) {
+    support.innerHTML = `
+      <strong>A note on question 9</strong>
+      You don't have to carry hard thoughts alone. Talking with someone —
+      a trusted person, your doctor, or a helpline — can genuinely help.
+      <div style="margin-top:8px">
+        <a href="https://findahelpline.com" target="_blank" rel="noopener">findahelpline.com</a>
+        lists free, confidential support lines by country.
+      </div>
+      <div style="margin-top:4px;font-size:12px;color:var(--text3)">
+        If you're in immediate danger, please contact your local emergency service.
+      </div>
+    `;
+    support.style.display = '';
+  } else {
+    support.style.display = 'none';
+    support.innerHTML = '';
+  }
+}
+
+function closeQuestionnaire() {
+  closeModal('questionnaireModal');
+  // Reset to question view so the next open starts clean
+  document.getElementById('qQuestionView').style.display = '';
+  document.getElementById('qResultView').style.display = 'none';
+  qState.type = null;
+  qState.questions = [];
+  qState.answers = [];
+  qState.index = 0;
+}
+
+// --- Mental Health history list on the Body tab ---
+
+async function loadMentalHistory() {
+  const data = await api('getMentalAssessments', { limit: 10 });
+  if (!Array.isArray(data)) {
+    // Offline / error: render cached if we have it, else empty.
+    renderMentalHistory(mentalHistoryCache);
+    return;
+  }
+  mentalHistoryCache = data;
+  renderMentalHistory(data);
+}
+
+function renderMentalHistory(data) {
+  const box = document.getElementById('mentalHistory');
+  if (!box) return;
+  if (!data || !data.length) {
+    box.innerHTML = `<div style="font-size:11px;color:var(--text3);text-align:center;padding:8px">No assessments yet.</div>`;
+    return;
+  }
+  box.innerHTML = data.map(r => {
+    const sev = qSeverityBucket(r.type, r.score);
+    const maxScore = (r.type === 'PHQ9') ? 27 : 21;
+    const typeLabel = (r.type === 'PHQ9') ? 'PHQ-9' : 'GAD-7';
+    return `<div class="mental-history-row">
+      <div>
+        <span class="mh-score">${typeLabel}: ${r.score}/${maxScore}</span>
+        <span class="mh-sev ${sev.cls}">${sev.label}</span>
+      </div>
+      <span class="mh-meta">${r.date}${r.time ? ' ' + r.time : ''}</span>
+    </div>`;
+  }).join('');
 }
 
 // --- HABITS TAB ---
@@ -1679,6 +2248,10 @@ async function loadBodyTab() {
     renderBodyDashboard(cached);
     renderBodyHistory(cached);
   }
+
+  // v3 Phase 5: pull assessment history alongside biometrics so the Mental
+  // Health Check-in card reflects latest state on tab entry.
+  loadMentalHistory();
 }
 
 // Pick the most recent non-empty value for a field across all rows.
@@ -1849,6 +2422,13 @@ document.querySelectorAll('#moodPicker .mood-emoji').forEach(el => {
     }
   });
 });
+
+// --- Mental Health buttons (v3 Phase 5) ---
+// These open the same questionnaire modal configured for PHQ-9 or GAD-7.
+document.getElementById('btnPHQ9').addEventListener('click', () => startQuestionnaire('PHQ9'));
+document.getElementById('btnGAD7').addEventListener('click', () => startQuestionnaire('GAD7'));
+// Nav wiring lives in its own function so the closure on qState stays clean.
+bindQuestionnaireNav();
 
 // --- BENCHMARK TAB (v3 Phase 2) ---
 // State: the tracked types + the master list are fetched once per tab load.
