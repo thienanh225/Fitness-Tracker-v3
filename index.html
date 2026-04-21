@@ -637,9 +637,11 @@ textarea.form-input { resize:vertical; min-height:60px; }
           </div>
           <div class="form-row">
             <input class="form-input" id="detailVariation" placeholder="Variation" style="flex:1">
-            <input class="form-input" id="detailSets" placeholder="Sets" style="flex:0.4" type="number">
+          </div>
+          <div class="form-row">
+            <input class="form-input" id="detailSets" placeholder="Sets" type="number">
             <span style="color:var(--text3)">×</span>
-            <input class="form-input" id="detailReps" placeholder="Reps" style="flex:0.4" type="number">
+            <input class="form-input" id="detailReps" placeholder="Reps" type="number">
           </div>
           <div class="form-row">
             <input class="form-input" id="detailWeight" placeholder="Weight/band (opt)">
@@ -737,6 +739,43 @@ textarea.form-input { resize:vertical; min-height:60px; }
       <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
         <button class="btn btn-secondary btn-sm" id="btnRefreshRuns">↻ Refresh</button>
       </div>
+
+      <!-- Manual Run/Walk entry (v3 post-Phase-5). Collapsible to stay out of
+           the way when the user mostly relies on Strava; expanding reveals a
+           short form. Stored alongside Strava entries with a 'manual_' ID
+           prefix so syncs can't collide or overwrite. -->
+      <div class="card">
+        <div class="card-title" id="manualRunHeader" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+          <span>+ Add manual entry</span>
+          <span id="manualRunToggle" style="color:var(--text3);font-size:12px">▼</span>
+        </div>
+        <div id="manualRunBody" style="display:none;margin-top:8px">
+          <div class="form-row">
+            <select class="form-select" id="manualRunType" style="flex:1">
+              <option value="Run">🏃 Run</option>
+              <option value="Walk">🚶 Walk</option>
+            </select>
+            <input class="form-input" id="manualRunDate" type="date" style="flex:1.4">
+          </div>
+          <div class="form-row">
+            <input class="form-input" id="manualRunDistance" type="number" step="0.01" placeholder="Distance (km)" style="flex:1">
+            <input class="form-input" id="manualRunDuration" placeholder="Time (mm:ss)" style="flex:1">
+          </div>
+          <div class="form-row">
+            <input class="form-input" id="manualRunName" placeholder="Name / route (optional)">
+          </div>
+          <div class="form-row">
+            <input class="form-input" id="manualRunElev" type="number" placeholder="Elevation (m, opt)" style="flex:1">
+            <input class="form-input" id="manualRunHR" type="number" placeholder="Avg HR (opt)" style="flex:1">
+          </div>
+          <button class="btn btn-primary btn-block" id="btnSaveManualRun" style="margin-top:4px">Save entry</button>
+          <p style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.4">
+            Duration: mm:ss or hh:mm:ss. Saved locally, not pushed to Strava.
+            A Run entry also auto-marks today's Run chip; Walk doesn't.
+          </p>
+        </div>
+      </div>
+
       <div id="runList"></div>
       <div id="runDetail" style="display:none"></div>
     </div>
@@ -1034,24 +1073,48 @@ const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const ACTIVITIES = ['Stretch','Boulder','Ring','BW','Leg','Run','Sport','Night'];
 const ACT_KEYS = { Stretch:'Stretch', Boulder:'Boulder', Ring:'Ring', BW:'BW', Leg:'Leg', Run:'Run', Sport:'Sport', Night:'Night' };
 const ALL_METRICS = [
-  { id:'Weight', label:'Weight', unit:'kg' },
-  { id:'BodyFat', label:'Body Fat', unit:'%' },
-  { id:'WaistToHeight', label:'Waist/Ht', unit:'ratio' },
-  { id:'Waist', label:'Waist', unit:'cm' },
-  { id:'BMI', label:'BMI', unit:'' },
-  { id:'RHR', label:'RHR', unit:'bpm' },
-  { id:'VO2max', label:'VO2 max', unit:'ml/kg' },
-  { id:'HRV', label:'HRV', unit:'ms' },
-  { id:'ChessElo', label:'Chess Elo', unit:'' },
+  { id:'Weight', label:'Weight', unit:'kg',
+    format: v => trimFloat(v, 1) },
+  { id:'BodyFat', label:'Body Fat', unit:'%',
+    format: v => trimFloat(v, 1) },
+  { id:'WaistToHeight', label:'Waist/Ht', unit:'ratio',
+    format: v => trimFloat(v, 2) },
+  { id:'Waist', label:'Waist', unit:'cm',
+    format: v => trimFloat(v, 1) },
+  { id:'BMI', label:'BMI', unit:'',
+    format: v => trimFloat(v, 1) },
+  { id:'RHR', label:'RHR', unit:'bpm',
+    format: v => trimFloat(v, 0) },
+  { id:'VO2max', label:'VO2 max', unit:'ml/kg',
+    format: v => trimFloat(v, 1) },
+  { id:'HRV', label:'HRV', unit:'ms',
+    format: v => trimFloat(v, 0) },
+  { id:'ChessElo', label:'Chess Elo', unit:'',
+    format: v => trimFloat(v, 0) },
   // v3 Phase 3: sleep + mood. These use custom formatters because their raw
   // storage values (minutes, 1-5 scale) aren't what you'd want rendered.
+  // customUnit:true signals "this formatter already includes any unit/suffix;
+  // don't append m.unit after it". Numeric formatters (trimFloat) leave the
+  // unit alone so renderBodyDashboard still shows "kg", "%", "bpm", etc.
   { id:'SleepDuration', label:'Sleep', unit:'',
-    format: v => formatSleepDuration(v) },
+    format: v => formatSleepDuration(v), customUnit: true },
   { id:'SleepQuality',  label:'Sleep Qual.', unit:'/5',
-    format: v => v ? `${v}/5` : '' },
+    format: v => v ? `${v}/5` : '', customUnit: true },
   { id:'Mood',          label:'Mood', unit:'',
-    format: v => MOOD_EMOJIS[parseInt(v) - 1] || '' }
+    format: v => MOOD_EMOJIS[parseInt(v) - 1] || '', customUnit: true }
 ];
+
+// v3 Phase 5 follow-up: Apple Health reports body fat as a fraction with
+// full float precision (e.g. 0.156000003... → 15.60000032186508%). Round
+// numeric metrics to human-readable precision; preserves the raw value on
+// disk, only normalizes the display. Unit suffix is kept since format now
+// short-circuits the unit-append path in renderBodyDashboard.
+function trimFloat(v, decimals) {
+  if (v === '' || v === null || v === undefined) return '';
+  const n = parseFloat(v);
+  if (isNaN(n)) return '';
+  return n.toFixed(decimals);
+}
 
 // Emoji scale for 1..5 mood
 const MOOD_EMOJIS = ['😞','😕','😐','🙂','😄'];
@@ -1906,6 +1969,7 @@ async function loadHabitsWeek() {
       weekHabits[r.Day] = {
         Stretch: r.Stretch == 1, Boulder: r.Boulder == 1, Ring: r.Ring == 1,
         BW: r.BW == 1, Leg: r.Leg == 1, Run: r.Run == 1, Sport: r.Sport == 1,
+        Night: r.Night == 1,
         Notes: r.Notes || ''
       };
     });
@@ -2112,6 +2176,10 @@ function renderClimbHistory(sessions) {
 
 // --- RUN TAB ---
 async function loadRunTab() {
+  // Manual entry date defaults to today on every tab entry so the field is
+  // never left stale from a previous session.
+  document.getElementById('manualRunDate').value = localDate();
+
   const status = await api('stravaStatus');
   if (!status || !status.connected) {
     document.getElementById('stravaConnect').style.display = 'block';
@@ -2135,6 +2203,67 @@ document.getElementById('btnRefreshRuns').addEventListener('click', async () => 
   // v3: Strava sync auto-chips Run on Habits for each new run's date.
   // Refresh current week's Habits state so the chip updates without a reload.
   loadHabitsWeek();
+});
+
+// --- Manual Run/Walk entry (v3 post-Phase-5) ---
+// Collapsible card header toggles the form body open/closed.
+document.getElementById('manualRunHeader').addEventListener('click', () => {
+  const body = document.getElementById('manualRunBody');
+  const toggle = document.getElementById('manualRunToggle');
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  toggle.textContent = isOpen ? '▼' : '▲';
+});
+
+// Save: validate client-side (duration non-empty, distance positive), then
+// round-trip. Success clears the form, re-loads the run list, and refreshes
+// Habits if the Run chip might have flipped (only happens for type=Run).
+document.getElementById('btnSaveManualRun').addEventListener('click', async () => {
+  const type = document.getElementById('manualRunType').value;
+  const date = document.getElementById('manualRunDate').value;
+  const distance = document.getElementById('manualRunDistance').value;
+  const duration = document.getElementById('manualRunDuration').value.trim();
+  const name = document.getElementById('manualRunName').value.trim();
+  const elevation = document.getElementById('manualRunElev').value;
+  const avgHR = document.getElementById('manualRunHR').value;
+
+  if (!date) { alert('Date is required.'); return; }
+  if (!distance || parseFloat(distance) <= 0) { alert('Distance must be positive.'); return; }
+  if (!duration) { alert('Duration required (mm:ss or hh:mm:ss).'); return; }
+
+  const btn = document.getElementById('btnSaveManualRun');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  const resp = await api('saveManualRun', {
+    type, date,
+    distanceKm: distance,
+    duration,
+    name: name || '',
+    elevation: elevation || '',
+    avgHR: avgHR || ''
+  });
+  btn.disabled = false;
+  if (!resp || resp.error) {
+    btn.textContent = 'Save entry';
+    alert('Could not save: ' + (resp && resp.error ? resp.error : 'check connection'));
+    return;
+  }
+  btn.textContent = '✓ Saved';
+  setTimeout(() => { btn.textContent = 'Save entry'; }, 1200);
+
+  // Clear optional fields, keep type + date for quick subsequent entries
+  document.getElementById('manualRunDistance').value = '';
+  document.getElementById('manualRunDuration').value = '';
+  document.getElementById('manualRunName').value = '';
+  document.getElementById('manualRunElev').value = '';
+  document.getElementById('manualRunHR').value = '';
+
+  // Refresh list; refresh Habits chips if Run type (backend auto-chipped).
+  loadRuns();
+  if (type === 'Run') {
+    localStorage.removeItem('ft_habits');
+    loadHabitsWeek();
+  }
 });
 
 async function loadRuns() {
@@ -2272,7 +2401,9 @@ function renderBodyDashboard(data) {
     if (!m) return;
     const raw = latestValueFor(data, id);
     const display = m.format ? (m.format(raw) || '—') : (raw !== '' ? raw : '—');
-    const unit = m.format ? '' : m.unit;
+    // customUnit formatters (sleep/mood/quality) already include any unit
+    // string; numeric formatters (trimFloat) leave m.unit to be appended here.
+    const unit = m.customUnit ? '' : m.unit;
     grid.innerHTML += `<div class="metric-card">
       <div class="metric-val">${display}${unit ? `<span class="metric-unit"> ${unit}</span>` : ''}</div>
       <div class="metric-label">${m.label}</div>
