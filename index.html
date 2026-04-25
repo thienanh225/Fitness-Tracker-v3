@@ -230,6 +230,47 @@ textarea.form-input { resize:vertical; min-height:60px; }
 .detail-meta { color:var(--text3); font-family:var(--mono); font-size:11px; }
 .delete-x { color:var(--coral); font-weight:700; cursor:pointer; padding:4px 8px; }
 
+/* --- DATA FLAGS (Turn 1) --- */
+/* Warning badge shown on history rows when biometric values fall outside
+   sanity ranges. Save-and-flag policy: data isn't thrown away, but the
+   user is told which field looks suspicious so they can fix the Shortcut
+   or edit the sheet. */
+.data-flag-warn {
+  display:inline-block;
+  font-size:10px; padding:2px 7px; margin-left:6px;
+  border-radius:6px; font-weight:600;
+  background:var(--amber-bg); color:var(--amber);
+  letter-spacing:0.3px;
+}
+.metric-card.flagged .metric-val { color:var(--amber); }
+.metric-card.flagged .metric-val::after {
+  content:' ⚠️'; font-size:14px;
+}
+
+/* --- TOAST (Turn 1) --- */
+/* Lightweight screen-bottom toast for transient feedback (save confirmations,
+   validation warnings, sync errors). Single visible instance — new calls
+   replace old ones. Auto-dismisses after 4s unless persistent=true. */
+#appToast {
+  position:fixed; left:50%; bottom:80px;
+  transform:translateX(-50%);
+  max-width:420px; width:calc(100% - 32px);
+  padding:12px 16px; border-radius:var(--radius-sm);
+  background:var(--card); color:var(--text);
+  border:1px solid var(--card-border);
+  box-shadow:0 6px 24px rgba(0,0,0,0.25);
+  font-size:13px; line-height:1.4;
+  z-index:1000; display:none;
+  animation:toastSlideIn 0.25s ease-out;
+}
+#appToast.warn  { border-left:4px solid var(--amber); }
+#appToast.error { border-left:4px solid var(--coral); }
+#appToast.ok    { border-left:4px solid var(--green); }
+@keyframes toastSlideIn {
+  from { transform:translate(-50%, 20px); opacity:0; }
+  to   { transform:translate(-50%, 0);    opacity:1; }
+}
+
 /* --- MILESTONES --- */
 .milestone-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
 .milestone {
@@ -266,6 +307,30 @@ textarea.form-input { resize:vertical; min-height:60px; }
 .radar-stat-diff { font-size:10px; font-family:var(--mono); }
 .radar-stat-diff.positive { color:var(--green); }
 .radar-stat-diff.negative { color:var(--coral); }
+
+/* --- Turn 1.5 radar additions --- */
+.radar-legend {
+  display:flex; justify-content:center; flex-wrap:wrap; gap:12px;
+  margin:4px 0 8px; font-size:10px; color:var(--text3);
+  font-family:var(--mono); letter-spacing:0.2px;
+}
+.radar-legend-item { display:inline-flex; align-items:center; gap:5px; }
+.radar-legend-dot {
+  display:inline-block; width:10px; height:10px; border-radius:50%;
+}
+.radar-stat-trend {
+  font-size:9px; font-family:var(--mono); color:var(--text3);
+  margin-top:1px;
+}
+.radar-stat-trend.positive { color:var(--green); }
+.radar-stat-trend.negative { color:var(--coral); }
+.radar-partial-tag {
+  display:inline-block; margin-left:5px;
+  font-size:8px; padding:1px 5px; border-radius:4px;
+  background:var(--amber-bg); color:var(--amber);
+  text-transform:uppercase; font-weight:700; letter-spacing:0.3px;
+  vertical-align:middle;
+}
 
 /* v3 Phase 4: tap a radar-stat tile to reveal its metric breakdown */
 .radar-breakdown {
@@ -611,6 +676,7 @@ textarea.form-input { resize:vertical; min-height:60px; }
     </div>
     <div class="radar-body" id="radarBody">
       <canvas id="radarCanvas" width="300" height="260" style="width:100%;max-height:260px;"></canvas>
+      <div class="radar-legend" id="radarLegend"></div>
       <div class="radar-stats-grid" id="radarStatsGrid"></div>
       <div class="radar-breakdown" id="radarBreakdown" style="display:none;"></div>
     </div>
@@ -639,9 +705,9 @@ textarea.form-input { resize:vertical; min-height:60px; }
             <input class="form-input" id="detailVariation" placeholder="Variation" style="flex:1">
           </div>
           <div class="form-row">
-            <input class="form-input" id="detailSets" placeholder="Sets" type="number">
+            <input class="form-input" id="detailSets" placeholder="Sets" type="number" style="flex:0 0 90px">
             <span style="color:var(--text3)">×</span>
-            <input class="form-input" id="detailReps" placeholder="Reps" type="number">
+            <input class="form-input" id="detailReps" placeholder="Reps" type="number" style="flex:0 0 90px">
           </div>
           <div class="form-row">
             <input class="form-input" id="detailWeight" placeholder="Weight/band (opt)">
@@ -945,6 +1011,9 @@ textarea.form-input { resize:vertical; min-height:60px; }
   </div>
 </nav>
 
+<!-- Toast container (Turn 1). Single element, reused for all transient messages. -->
+<div id="appToast" onclick="this.style.display='none'"></div>
+
 <!-- PROFILE MODAL -->
 <div class="modal-overlay" id="profileModal">
   <div class="modal-sheet">
@@ -1064,6 +1133,12 @@ let weekHabits = {};
 let weekDetails = [];
 let currentRoutes = [];
 let climbEditRowIndex = null;
+// v3 Turn 1: gym list now lives in the Profile sheet (under the 'gyms' key)
+// so it's shared across devices/browsers. localStorage still serves as an
+// offline cache — on first paint we use whatever cache we have; loadProfile()
+// will overwrite with the authoritative server copy once it resolves. This
+// means the Climb tab renders instantly on cold load and self-corrects if the
+// cache was stale.
 let gyms = JSON.parse(localStorage.getItem('ft_gyms') || '["Leo Bouldering","VClimb","OnTop"]');
 let radarCollapsed = localStorage.getItem('ft_radar_collapsed') === 'true';
 let dashboardMetrics = ['Weight','WaistToHeight','RHR','BodyFat'];
@@ -1114,6 +1189,49 @@ function trimFloat(v, decimals) {
   const n = parseFloat(v);
   if (isNaN(n)) return '';
   return n.toFixed(decimals);
+}
+
+// === TOAST helper (Turn 1) ===================================================
+// Show a transient notification at the bottom of the screen. Single instance:
+// a new call replaces the previous message immediately. Kind drives the color
+// accent: 'ok' green, 'warn' amber, 'error' coral. Default duration 4s — long
+// enough to read a multi-line validation message without blocking the UI.
+let toastTimer = null;
+function toast(message, kind, ms) {
+  const el = document.getElementById('appToast');
+  if (!el) return;
+  el.className = kind || '';
+  el.innerHTML = message;
+  el.style.display = 'block';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.display = 'none'; }, ms || 4000);
+}
+
+// === BIOMETRIC FLAG UI (Turn 1) ==============================================
+// Human-readable labels for the flag field names returned by the backend
+// (flagBadBiometrics in apps_script.js). Kept in sync with BIOMETRIC_RANGES
+// on the server. When a save or sync returns flags, these get formatted into
+// a toast like:  "⚠️ Values out of range: Body fat (5-30%), Weight (50-100 kg)"
+const BIOMETRIC_RANGE_LABELS = {
+  BodyFat: { name: 'Body fat', range: '5-30%' },
+  Weight:  { name: 'Weight',   range: '50-100 kg' },
+  BMI:     { name: 'BMI',      range: '10-30' },
+  Waist:   { name: 'Waist',    range: '50-150 cm' },
+  RHR:     { name: 'RHR',      range: '30-100 bpm' },
+  HRV:     { name: 'HRV',      range: '5-50 ms' }
+};
+
+// Parse server "flags" string (e.g. "BodyFat,Weight") into a user-facing
+// warning message. Empty or missing flags → returns '' so callers can skip.
+function formatFlagMessage(flagsStr) {
+  if (!flagsStr) return '';
+  const names = String(flagsStr).split(',').filter(Boolean);
+  if (!names.length) return '';
+  const parts = names.map(n => {
+    const meta = BIOMETRIC_RANGE_LABELS[n];
+    return meta ? `${meta.name} (${meta.range})` : n;
+  });
+  return `⚠️ Values out of range: ${parts.join(', ')}. Saved anyway — check your Shortcut or sheet.`;
 }
 
 // Emoji scale for 1..5 mood
@@ -1344,28 +1462,37 @@ let activeBreakdownKey = null;     // which radar-stat tile is currently expande
 
 // Human-readable labels for the per-metric breakdown rows. Keys match the
 // component.name strings returned by getRadarStats in apps_script.js.
+// Updated Turn 1.5: new Strength inputs (lower body, core), new Agility
+// consolidated climbing component, BMI removed from Physique, stretch streak
+// replaced by activity streak, chess Elo removed from Mind.
 const RADAR_COMPONENT_LABELS = {
+  // Strength
   climbing_grade:    'Max V-grade (90d)',
   pushups_2min:      'Pushups (2-min)',
   pullups_max:       'Pullups (max)',
-  vo2max:            'VO2max',
+  lower_body:        'Lower body (squats / jump)',
+  core:              'Core (plank / sit-ups)',
+  // Endurance
+  weekly_mileage:    'Weekly mileage (28d)',
   best_pace:         'Best pace (any distance)',
-  weekly_mileage:    'Weekly mileage (28d avg)',
   rhr:               'Resting HR',
   hrv:               'HRV',
-  flash_rate:        'Flash rate (90d)',
-  dyno_routes:       'Dyno/coordination routes (90d)',
-  slab_tech_routes:  'Slab/technical routes (90d)',
+  vo2max:            'VO2max',
+  // Agility
+  climb_quality:     'Climb quality (flash + variety)',
+  beep_or_burpees:   'Beep test / burpees',
+  sit_and_reach:     'Sit-and-reach',
   stretch_30d:       'Stretch consistency (30d)',
+  // Physique
   body_fat:          'Body fat %',
   whtr:              'Waist-to-height',
-  bmi:               'BMI (target center)',
-  stretch_streak:    'Stretch streak',
+  // Consistency
+  activity_streak:   'Activity streak (any chip)',
   weekly_hit:        '≥3 sessions/week (8wk)',
+  // Mind
   sleep:             'Sleep (duration + quality, 14d)',
   mood:              'Mood avg (14d)',
-  questionnaires:    'PHQ-9 / GAD-7',
-  chess_elo:         'Chess Elo'
+  questionnaires:    'PHQ-9 / GAD-7'
 };
 
 async function loadRadar() {
@@ -1373,47 +1500,71 @@ async function loadRadar() {
   if (!data || !data.stats) return;
   const stats = data.stats;
   const baselines = data.baselines;
+  const historical = data.historical;         // null if no snapshot near 30 days ago
+  const partial = data.partial || {};         // { attr: bool } from backend
   radarComponents = data.components || {};
 
-  // v3 Phase 4: six attributes — Vitality+Discipline replaced by Physique+Consistency,
-  // and Mind now aggregates sleep/mood/questionnaires/Elo instead of Elo-only.
   const labels = ['Strength','Endurance','Agility','Physique','Consistency','Mind'];
   const keys   = ['strength','endurance','agility','physique','consistency','mind'];
   const values = keys.map(k => stats[k] || 0);
   const baseValues = keys.map(k => baselines[k] || 50);
+  const pastValues = historical ? keys.map(k => historical[k] || 0) : null;
 
+  // Turn 1.5: three overlays with deliberate visual hierarchy.
+  //   - "You now"     → solid green, 2.5px, filled translucent (primary focus)
+  //   - "You 30d ago" → solid blue, 1.5px, no fill (so you see the comparison
+  //                     without it competing for attention) — only drawn when
+  //                     historical data is available
+  //   - "Peer median" → dotted amber, 1px (reference scale, not another "you")
+  // Amber for peer deliberately breaks the green/blue you-axis so it reads as
+  // context rather than competition.
   const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   const textColor = isDark ? '#9a9aa2' : '#5a5a62';
   const gridColor = isDark ? '#2a2a34' : '#e0e0da';
   const greenColor = isDark ? '#4ade80' : '#2d9d5a';
+  const blueColor  = isDark ? '#60a5fa' : '#3b82f6';
+  const amberColor = isDark ? '#fbbf24' : '#d97706';
+
+  const datasets = [
+    {
+      label: 'Peer median',
+      data: baseValues,
+      borderColor: amberColor,
+      borderDash: [2, 4],
+      borderWidth: 1,
+      backgroundColor: 'transparent',
+      pointRadius: 0,
+      order: 3
+    }
+  ];
+  if (pastValues) {
+    datasets.push({
+      label: 'You 30 days ago',
+      data: pastValues,
+      borderColor: blueColor,
+      borderWidth: 1.5,
+      backgroundColor: 'transparent',
+      pointRadius: 2,
+      pointBackgroundColor: blueColor,
+      order: 2
+    });
+  }
+  datasets.push({
+    label: 'You now',
+    data: values,
+    borderColor: greenColor,
+    backgroundColor: (isDark ? 'rgba(74,222,128,0.18)' : 'rgba(45,157,90,0.14)'),
+    borderWidth: 2.5,
+    pointRadius: 3.5,
+    pointBackgroundColor: greenColor,
+    order: 1
+  });
 
   const ctx = document.getElementById('radarCanvas').getContext('2d');
   if (radarChart) radarChart.destroy();
   radarChart = new Chart(ctx, {
     type: 'radar',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Baseline',
-          data: baseValues,
-          borderColor: gridColor,
-          borderDash: [5, 5],
-          borderWidth: 1.5,
-          backgroundColor: 'transparent',
-          pointRadius: 0
-        },
-        {
-          label: 'You',
-          data: values,
-          borderColor: greenColor,
-          backgroundColor: (isDark ? 'rgba(74,222,128,0.15)' : 'rgba(45,157,90,0.12)'),
-          borderWidth: 2,
-          pointRadius: 3,
-          pointBackgroundColor: greenColor
-        }
-      ]
-    },
+    data: { labels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -1430,45 +1581,68 @@ async function loadRadar() {
     }
   });
 
-  // Stats grid below radar. Each tile is tappable — tap toggles the breakdown
-  // panel showing the individual metric scores that rolled up into that
-  // attribute. Diff is vs baseline (50 = peer median for that gender+age).
+  // Render a small legend below the canvas so the three colors are decoded
+  // without extra Chart.js machinery. More compact than Chart's built-in legend.
+  const legend = document.getElementById('radarLegend');
+  if (legend) {
+    let html = `<span class="radar-legend-item"><span class="radar-legend-dot" style="background:${greenColor}"></span>You now</span>`;
+    if (pastValues) html += `<span class="radar-legend-item"><span class="radar-legend-dot" style="background:${blueColor}"></span>30 days ago</span>`;
+    html += `<span class="radar-legend-item"><span class="radar-legend-dot" style="background:${amberColor};border:1px dashed ${amberColor}"></span>Peer median</span>`;
+    legend.innerHTML = html;
+  }
+
+  // Stats grid. Each tile shows:
+  //   - attribute value
+  //   - diff vs peer (e.g. "+2")
+  //   - diff vs 30d-ago if available (e.g. "↗ +3" in blue / "↘ -2" in coral)
+  //   - "(partial)" tag when backend flagged >30% of weight as missing
   const grid = document.getElementById('radarStatsGrid');
   grid.innerHTML = '';
   keys.forEach((k, i) => {
-    const diff = values[i] - baseValues[i];
-    const diffStr = diff >= 0 ? '+' + diff : String(diff);
-    const cls = diff >= 0 ? 'positive' : 'negative';
+    const peerDiff = values[i] - baseValues[i];
+    const peerStr = peerDiff >= 0 ? '+' + peerDiff : String(peerDiff);
+    const peerCls = peerDiff >= 0 ? 'positive' : 'negative';
+
+    let trendHtml = '';
+    if (historical) {
+      const trendDiff = values[i] - pastValues[i];
+      if (trendDiff !== 0) {
+        const arrow = trendDiff > 0 ? '↗' : '↘';
+        const trendCls = trendDiff > 0 ? 'positive' : 'negative';
+        const trendStr = (trendDiff > 0 ? '+' : '') + trendDiff;
+        trendHtml = `<div class="radar-stat-trend ${trendCls}">${arrow} ${trendStr} 30d</div>`;
+      } else {
+        trendHtml = `<div class="radar-stat-trend">— 30d</div>`;
+      }
+    }
+
+    const partialTag = partial[k] ? '<span class="radar-partial-tag">partial</span>' : '';
     const isActive = activeBreakdownKey === k ? 'active' : '';
     grid.innerHTML += `<div class="radar-stat ${isActive}" data-key="${k}" data-label="${labels[i]}">
-      <div class="radar-stat-name">${labels[i]}</div>
+      <div class="radar-stat-name">${labels[i]}${partialTag}</div>
       <div class="radar-stat-val">${values[i]}</div>
-      <div class="radar-stat-diff ${cls}">${diffStr}</div>
+      <div class="radar-stat-diff ${peerCls}">${peerStr} peer</div>
+      ${trendHtml}
     </div>`;
   });
 
-  // Wire up tap-to-expand on each tile
   grid.querySelectorAll('.radar-stat').forEach(tile => {
     tile.addEventListener('click', () => {
       const key = tile.getAttribute('data-key');
       const label = tile.getAttribute('data-label');
       if (activeBreakdownKey === key) {
-        // toggle off
         activeBreakdownKey = null;
         hideRadarBreakdown();
       } else {
         activeBreakdownKey = key;
         showRadarBreakdown(key, label);
       }
-      // update active class on tiles
       grid.querySelectorAll('.radar-stat').forEach(t => {
         t.classList.toggle('active', t.getAttribute('data-key') === activeBreakdownKey);
       });
     });
   });
 
-  // If a breakdown was open before the reload (e.g. radar refresh on theme
-  // change), re-render it with the fresh component data.
   if (activeBreakdownKey) {
     const labelIdx = keys.indexOf(activeBreakdownKey);
     if (labelIdx >= 0) showRadarBreakdown(activeBreakdownKey, labels[labelIdx]);
@@ -1833,6 +2007,10 @@ function renderDetailList(day) {
   const details = weekDetails.filter(d => d.Week === week && d.Day === day);
   const list = document.getElementById('detailList');
   list.innerHTML = '';
+  if (!details.length) {
+    list.innerHTML = `<div style="font-size:11px;color:var(--text3);padding:6px 0;font-style:italic">No exercises logged for ${day} yet.</div>`;
+    return;
+  }
   details.forEach(d => {
     const setsReps = d.Sets && d.Reps ? `${d.Sets}×${d.Reps}` : '';
     list.innerHTML += `<div class="detail-entry">
@@ -2051,7 +2229,14 @@ document.getElementById('btnAddGym').addEventListener('click', () => {
   const name = document.getElementById('newGymName').value.trim();
   if (name) { gyms.push(name); saveGyms(); renderGymDropdown(); renderGymList(); document.getElementById('newGymName').value = ''; }
 });
-function saveGyms() { localStorage.setItem('ft_gyms', JSON.stringify(gyms)); }
+// v3 Turn 1: persist to both localStorage (instant, offline-safe) and to
+// the Profile sheet (cross-device). Network save is fire-and-forget so the
+// UI stays snappy — if offline, the next successful save catches everything
+// up since we push the full array each time (not a diff).
+function saveGyms() {
+  localStorage.setItem('ft_gyms', JSON.stringify(gyms));
+  api('saveProfile', { fields: { gyms: JSON.stringify(gyms) } });
+}
 
 // Route builder
 document.querySelectorAll('#routeStyles .style-chip').forEach(chip => {
@@ -2386,11 +2571,23 @@ async function loadBodyTab() {
 // Pick the most recent non-empty value for a field across all rows.
 // Sleep/mood and biometrics are often on different rows, so "latest" per
 // field gives a more useful dashboard than picking the top row wholesale.
+// Turn 1: skips rows where this specific field was flagged out-of-range by
+// the backend, so bad sensor readings don't poison the dashboard number.
 function latestValueFor(data, id) {
   for (const r of data) {
-    if (r[id] !== '' && r[id] !== null && r[id] !== undefined) return r[id];
+    if (r[id] === '' || r[id] === null || r[id] === undefined) continue;
+    const flags = String(r.DataFlags || '').split(',').filter(Boolean);
+    if (flags.indexOf(id) >= 0) continue;
+    return r[id];
   }
   return '';
+}
+
+// Turn 1: does ANY row in the dataset have this field flagged? Used to decide
+// whether the dashboard card shows a subtle ⚠️ as a "something's off here"
+// hint — a more discoverable alternative to silent skipping.
+function hasFlaggedValue(data, id) {
+  return data.some(r => String(r.DataFlags || '').split(',').indexOf(id) >= 0);
 }
 
 function renderBodyDashboard(data) {
@@ -2404,7 +2601,10 @@ function renderBodyDashboard(data) {
     // customUnit formatters (sleep/mood/quality) already include any unit
     // string; numeric formatters (trimFloat) leave m.unit to be appended here.
     const unit = m.customUnit ? '' : m.unit;
-    grid.innerHTML += `<div class="metric-card">
+    // If we fell through to '—' because the only data for this metric was
+    // all flagged, mark the card so the user knows data exists but looks wrong.
+    const flagged = (display === '—' && hasFlaggedValue(data, id));
+    grid.innerHTML += `<div class="metric-card${flagged ? ' flagged' : ''}">
       <div class="metric-val">${display}${unit ? `<span class="metric-unit"> ${unit}</span>` : ''}</div>
       <div class="metric-label">${m.label}</div>
     </div>`;
@@ -2435,8 +2635,14 @@ function renderBodyHistory(data) {
     if (!vals) return;
     const sourceIcon = r.Source === 'AppleHealth' ? '♥ ' : '';
     const timeStr = r.Time ? ' · ' + r.Time : '';
+    // Turn 1: if any biometric on this row was flagged out-of-range, show
+    // a warning badge so the user can spot and correct bad sync data.
+    const flags = String(r.DataFlags || '').split(',').filter(Boolean);
+    const flagBadge = flags.length
+      ? `<span class="data-flag-warn" title="Fields out of range: ${flags.join(', ')}">⚠️ check ${flags.join(', ')}</span>`
+      : '';
     container.innerHTML += `<div class="detail-entry">
-      <div class="detail-text"><strong>${sourceIcon}${r.Date}${timeStr}</strong><br><span style="font-size:12px;color:var(--text3)">${vals}</span></div>
+      <div class="detail-text"><strong>${sourceIcon}${r.Date}${timeStr}</strong>${flagBadge}<br><span style="font-size:12px;color:var(--text3)">${vals}</span></div>
       <span class="delete-x" data-row="${r._rowIndex}">×</span>
     </div>`;
   });
@@ -2459,13 +2665,49 @@ document.getElementById('btnSaveBody').addEventListener('click', async () => {
     [metric]: parseFloat(value),
     Source: 'Manual'
   };
-  await api('saveMeasurement', params);
+  const resp = await api('saveMeasurement', params);
   document.getElementById('bodyValue').value = '';
   loadBodyTab();
+  // Turn 1: if the save produced any out-of-range flags, warn the user.
+  // Non-blocking — data is saved either way, but the toast tells them to
+  // double-check before the bad value skews the radar.
+  if (resp && resp.flags) {
+    const msg = formatFlagMessage(resp.flags);
+    if (msg) toast(msg, 'warn', 6000);
+  } else if (resp && resp.success) {
+    toast('✓ Saved', 'ok', 1500);
+  }
 });
 
 document.getElementById('btnSyncHealth').addEventListener('click', () => {
+  // Before handing off to the Shortcut, stash a "just synced" flag so that
+  // when the user returns to the app, we can refresh the Body tab and check
+  // for fresh DataFlags. This is the only way to surface Shortcut-side
+  // validation warnings — the Shortcut invokes the API directly without
+  // bouncing the response back to this page.
+  sessionStorage.setItem('ft_sync_expected', '1');
   window.location.href = 'shortcuts://run-shortcut?name=Fitness%20Sync';
+});
+
+// Turn 1: when the app regains visibility after a Shortcut-triggered sync,
+// check recently-saved rows for DataFlags and toast a summary if any are new.
+// Runs once per return trip.
+window.addEventListener('pageshow', async () => {
+  if (sessionStorage.getItem('ft_sync_expected') !== '1') return;
+  sessionStorage.removeItem('ft_sync_expected');
+  try {
+    const recent = await api('getMeasurements', { limit: 10 });
+    if (!Array.isArray(recent) || !recent.length) return;
+    const allFlags = new Set();
+    recent.forEach(r => {
+      String(r.DataFlags || '').split(',').filter(Boolean).forEach(f => allFlags.add(f));
+    });
+    if (allFlags.size) {
+      const msg = formatFlagMessage(Array.from(allFlags).join(','));
+      if (msg) toast(msg, 'warn', 8000);
+    }
+    loadBodyTab();
+  } catch (e) { /* non-fatal */ }
 });
 
 // --- Sleep entry (v3 Phase 3) ---
@@ -3072,6 +3314,26 @@ async function loadProfile() {
     document.getElementById('profEthnicity').value = data.ethnicity || 'Vietnamese';
     if (data.dashboardMetrics) {
       try { dashboardMetrics = JSON.parse(data.dashboardMetrics); } catch(e) {}
+    }
+    // v3 Turn 1: gym list is now server-authoritative. If the profile has
+    // a 'gyms' key we overwrite local state and refresh the Climb tab UI;
+    // if not (fresh sheet / older profile), we seed the server with the
+    // local defaults so subsequent devices see the same list.
+    if (data.gyms) {
+      try {
+        const serverGyms = JSON.parse(data.gyms);
+        if (Array.isArray(serverGyms) && serverGyms.length) {
+          gyms = serverGyms;
+          localStorage.setItem('ft_gyms', JSON.stringify(gyms));
+          // Climb tab may already be rendered — re-sync its dropdown + list.
+          if (document.getElementById('climbLocation')) renderGymDropdown();
+          if (document.getElementById('gymList')) renderGymList();
+        }
+      } catch(e) { /* malformed JSON in profile — ignore, use local cache */ }
+    } else {
+      // No gyms key on server yet — seed it with whatever we have locally.
+      // Fire-and-forget; if it fails, saveGyms will retry on next mutation.
+      api('saveProfile', { fields: { gyms: JSON.stringify(gyms) } });
     }
     updateAppTitle();
   }
