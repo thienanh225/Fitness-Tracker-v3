@@ -1495,13 +1495,24 @@ const RADAR_COMPONENT_LABELS = {
   questionnaires:    'PHQ-9 / GAD-7'
 };
 
+// Turn 2: split radar rendering from radar fetching.
+//   loadRadar()         → network → applyRadarPayload(data)
+//   applyRadarPayload() → pure render, also called by initApp's bundle path
+// This lets cold-start paint the radar from the bundle without an extra
+// round-trip, and the breakdown overlay can be re-rendered from cache.
 async function loadRadar() {
   const data = await api('getRadarStats');
   if (!data || !data.stats) return;
+  localStorage.setItem('ft_radar', JSON.stringify(data));
+  applyRadarPayload(data);
+}
+
+function applyRadarPayload(data) {
+  if (!data || !data.stats) return;
   const stats = data.stats;
   const baselines = data.baselines;
-  const historical = data.historical;         // null if no snapshot near 30 days ago
-  const partial = data.partial || {};         // { attr: bool } from backend
+  const historical = data.historical;
+  const partial = data.partial || {};
   radarComponents = data.components || {};
 
   const labels = ['Strength','Endurance','Agility','Physique','Consistency','Mind'];
@@ -2106,23 +2117,37 @@ function renderHabitsStats() {
   renderStreaks();
 }
 
-function renderStreaks() {
-  // Simple streak calculation from cached data
-  const allHabits = JSON.parse(localStorage.getItem('ft_all_habits') || '[]');
-  let stretchStreak = 0;
-  // We'll compute from all habits sorted by date desc
-  const sorted = allHabits.slice().sort((a, b) => {
-    return (b.Week + b.Day).localeCompare(a.Week + a.Day);
-  });
-  for (const h of sorted) {
-    if (h.Stretch == 1 || h.Stretch === true) stretchStreak++;
-    else break;
-  }
+// Turn 2: streaks now come from the backend's getStreaks endpoint, which
+// applies the rolling-7 freeze rule for activity and counts climb/run as
+// week-streaks (consecutive weeks with at least one chip). The frontend's
+// only job is to fetch + render. We cache the last result in localStorage
+// so the streak row paints instantly on tab return; backend response
+// overwrites with authoritative values.
+async function renderStreaks() {
+  // Paint cached state first
+  const cached = JSON.parse(localStorage.getItem('ft_streaks') || 'null');
+  if (cached) drawStreakRow(cached);
 
-  document.getElementById('streakRow').innerHTML = `
-    <div class="streak-badge"><span class="streak-icon">🔥</span>Stretch<span class="streak-val">${stretchStreak}d</span></div>
-    <div class="streak-badge"><span class="streak-icon">💪</span>Training<span class="streak-val">—</span></div>
-    <div class="streak-badge"><span class="streak-icon">🧗</span>Climb<span class="streak-val">—</span></div>
+  // Fetch fresh
+  const fresh = await api('getStreaks');
+  if (fresh && typeof fresh === 'object' && !fresh.error) {
+    localStorage.setItem('ft_streaks', JSON.stringify(fresh));
+    drawStreakRow(fresh);
+  } else if (!cached) {
+    // No cache, no network — render empty placeholders so the row exists.
+    drawStreakRow({ activity: 0, climbWeek: 0, runWeek: 0 });
+  }
+}
+
+function drawStreakRow(s) {
+  const row = document.getElementById('streakRow');
+  if (!row) return;
+  // Activity: day-streak. Climb/Run: week-streaks with 'w' suffix to make
+  // the unit difference visually obvious.
+  row.innerHTML = `
+    <div class="streak-badge"><span class="streak-icon">🔥</span>Activity<span class="streak-val">${s.activity}d</span></div>
+    <div class="streak-badge"><span class="streak-icon">🧗</span>Climb<span class="streak-val">${s.climbWeek}w</span></div>
+    <div class="streak-badge"><span class="streak-icon">🏃</span>Run<span class="streak-val">${s.runWeek}w</span></div>
   `;
 }
 
@@ -2139,10 +2164,16 @@ async function loadHabitsWeek() {
   renderWeekNav();
   const week = getWeekString(currentWeekOffset);
 
-  // Try API first
+  // Read cache first so the week renders instantly even on slow networks.
+  // Network refresh updates cache + re-renders if anything changed.
+  const cached = JSON.parse(localStorage.getItem('ft_habits_' + week) || '{}');
+  weekHabits = cached;
+  renderDayGrid();
+  renderSelectedDay();
+
   const data = await api('getHabits', { week });
-  weekHabits = {};
   if (data && Array.isArray(data)) {
+    weekHabits = {};
     data.forEach(r => {
       weekHabits[r.Day] = {
         Stretch: r.Stretch == 1, Boulder: r.Boulder == 1, Ring: r.Ring == 1,
@@ -2152,20 +2183,14 @@ async function loadHabitsWeek() {
       };
     });
     localStorage.setItem('ft_habits_' + week, JSON.stringify(weekHabits));
-    // Also store all habits for streak calc
-    const allData = await api('getHabits');
-    if (allData) localStorage.setItem('ft_all_habits', JSON.stringify(allData));
-  } else {
-    // Fallback to localStorage
-    weekHabits = JSON.parse(localStorage.getItem('ft_habits_' + week) || '{}');
   }
+  // Turn 2: streaks now come from the dedicated getStreaks endpoint via
+  // renderStreaks(), which is cheaper than re-fetching all habits.
+  renderStreaks();
 
   await loadHabitDetails();
-
-  // Weekly notes
   const sunData = weekHabits['Sun'] || {};
   document.getElementById('weeklyNotes').value = sunData.Notes || '';
-
   renderDayGrid();
   renderSelectedDay();
 }
@@ -3373,7 +3398,19 @@ async function loadMilestones() {
   });
 }
 
-// --- INIT ---
+// --- INIT (Turn 2 — bundle endpoint + cache-first paint) ---
+//
+// Old cold-start: 4 sequential round-trips (profile, habits, radar,
+// milestones), each blocking on Apps Script cold-start of ~500-1500ms.
+// Total cold load felt like 3-6 seconds.
+//
+// New cold-start sequence:
+//   1. Paint everything from localStorage cache instantly. No spinner; the
+//      app shows whatever it had last time. Sync status reads "syncing".
+//   2. Single getInitialBundle call returns profile + habits + streaks +
+//      radar + milestones in one round-trip.
+//   3. Update UI from the bundle and overwrite cache. Sync status flips
+//      to "ok" (or stays "syncing" → "offline" if the call fails).
 async function initApp() {
   if (!API_URL) {
     setSyncStatus('offline');
@@ -3381,15 +3418,113 @@ async function initApp() {
     return;
   }
   setSyncStatus('syncing');
-  await loadProfile();
-  updateRadarCollapse();
-  loadHabitsWeek();
-  loadRadar();
-  loadMilestones();
+
+  // Step 1: paint from cache so the UI is responsive immediately.
+  paintFromCache();
+
+  // Step 2: one network call for everything we need on first paint.
+  let bundle = null;
+  try {
+    bundle = await api('getInitialBundle');
+  } catch (e) {
+    // network down or endpoint missing → fall back to per-endpoint loads
+  }
+
+  if (bundle && bundle.profile) {
+    applyBundle(bundle);
+    setSyncStatus('ok');
+  } else {
+    // Fallback path: classic per-endpoint loads. This also handles older
+    // backend deployments that don't have getInitialBundle yet, so frontend
+    // upgrades don't strand users on stale Apps Script versions.
+    await loadProfile();
+    updateRadarCollapse();
+    loadHabitsWeek();
+    loadRadar();
+    loadMilestones();
+    renderStreaks();
+  }
 }
 
-// Theme change listener for radar
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => loadRadar());
+// Paint UI from localStorage cache without waiting for the network. Each
+// loader has its own cache key already; we just trigger the renders that
+// know how to read from cache. Safe to call before any API calls.
+function paintFromCache() {
+  // Habits: loadHabitsWeek itself reads cache-first now (Turn 2 refactor),
+  // so just calling it paints synchronously from cache, then awaits network.
+  // We don't await here — this is intentional, we want immediate paint.
+  // Streak cache → renders streak row instantly
+  const cachedStreaks = JSON.parse(localStorage.getItem('ft_streaks') || 'null');
+  if (cachedStreaks && typeof drawStreakRow === 'function') drawStreakRow(cachedStreaks);
+  // Radar paints from cached structure
+  const cachedRadar = JSON.parse(localStorage.getItem('ft_radar') || 'null');
+  if (cachedRadar && cachedRadar.stats) {
+    try { applyRadarPayload(cachedRadar); } catch(e) {}
+  }
+  // Trigger a habits paint from cache (this also fires a network refresh,
+  // which is fine — bundle below also refreshes, this is best-effort).
+  try { loadHabitsWeek(); } catch(e) {}
+}
+
+// Apply a fresh bundle: write each piece to its cache, then re-render.
+function applyBundle(b) {
+  // Profile — populate form fields and merge gyms
+  if (b.profile) {
+    profile = b.profile;
+    document.getElementById('apiUrl').value = API_URL;
+    document.getElementById('profName').value = b.profile.name || '';
+    document.getElementById('profBirth').value = b.profile.birthdate || '';
+    document.getElementById('profGender').value = b.profile.gender || 'Male';
+    document.getElementById('profHeight').value = b.profile.height || '';
+    document.getElementById('profEthnicity').value = b.profile.ethnicity || 'Vietnamese';
+    if (b.profile.dashboardMetrics) {
+      try { dashboardMetrics = JSON.parse(b.profile.dashboardMetrics); } catch(e) {}
+    }
+    if (b.profile.gyms) {
+      try {
+        const sg = JSON.parse(b.profile.gyms);
+        if (Array.isArray(sg) && sg.length) {
+          gyms = sg;
+          localStorage.setItem('ft_gyms', JSON.stringify(gyms));
+        }
+      } catch(e) {}
+    }
+    updateAppTitle();
+    renderMetricToggles();
+  }
+  // Streaks
+  if (b.streaks) {
+    localStorage.setItem('ft_streaks', JSON.stringify(b.streaks));
+    if (typeof drawStreakRow === 'function') drawStreakRow(b.streaks);
+  }
+  // Radar
+  if (b.radar && b.radar.stats) {
+    localStorage.setItem('ft_radar', JSON.stringify(b.radar));
+    applyRadarPayload(b.radar);
+    updateRadarCollapse();
+  }
+  // Milestones
+  if (b.milestones && Array.isArray(b.milestones)) {
+    const container = document.getElementById('milestoneRow');
+    if (container) {
+      container.innerHTML = '';
+      b.milestones.forEach(m => {
+        container.innerHTML += `<span class="milestone">🏅 ${m.Label}</span>`;
+      });
+    }
+  }
+  // Habits — defer to loadHabitsWeek to handle week switching, but seed cache
+  if (b.habits && Array.isArray(b.habits)) {
+    loadHabitsWeek();
+  }
+}
+
+// Theme change re-renders radar with new color palette but reuses cached
+// data — no network needed since the underlying numbers haven't changed.
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const cached = JSON.parse(localStorage.getItem('ft_radar') || 'null');
+  if (cached && cached.stats) applyRadarPayload(cached);
+});
 
 initApp();
 </script>
