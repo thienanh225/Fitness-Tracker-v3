@@ -145,6 +145,14 @@ body { padding-top:var(--safe-top); padding-bottom:calc(64px + var(--safe-bottom
   border:1px solid var(--card-border); background:var(--card);
   font-family:var(--font); font-size:14px; color:var(--text);
   outline:none; transition:border-color 0.2s;
+  /* v3.1.1 fix: without border-box, `flex:0 0 90px` gives the content area
+     90px and adds 12px×2 padding + 1px×2 border on top → actual rendered
+     width 116px. Two of those side-by-side overflow narrow phone screens.
+     border-box makes the 90px the *total* width including padding/border,
+     which is what the flex constraint clearly intends. Same applied to
+     full-width inputs so their visual width matches container width
+     instead of extending into card padding. */
+  box-sizing:border-box;
 }
 .form-input:focus, .form-select:focus { border-color:var(--green); }
 .form-input::placeholder { color:var(--text3); }
@@ -272,6 +280,10 @@ textarea.form-input { resize:vertical; min-height:60px; }
 }
 
 /* --- MILESTONES --- */
+/* --- MILESTONES / BADGES (Turn 3) --- */
+/* Old "milestone-row" pill list is preserved for back-compat with any cached
+   markup, but the Turn 3 UI uses badge-grid: a compact tile grid that shows
+   earned and locked badges side by side, with a tap-for-details modal. */
 .milestone-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
 .milestone {
   display:inline-flex; align-items:center; gap:4px;
@@ -279,6 +291,88 @@ textarea.form-input { resize:vertical; min-height:60px; }
   background:var(--amber-bg); font-size:11px; font-weight:600;
   color:var(--amber);
 }
+
+.badges-section { margin-bottom:12px; }
+.badges-header {
+  display:flex; justify-content:space-between; align-items:baseline;
+  margin-bottom:8px;
+}
+.badges-title {
+  font-size:11px; font-weight:600; color:var(--text3);
+  text-transform:uppercase; letter-spacing:0.5px;
+}
+.badges-count {
+  font-size:11px; font-family:var(--mono); color:var(--text2);
+}
+.badge-grid {
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(56px, 1fr));
+  gap:6px; max-height:200px; overflow-y:auto;
+  padding:2px;
+}
+.badge-grid.collapsed { max-height:96px; }
+.badge-tile {
+  aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+  font-size:24px; cursor:pointer; user-select:none;
+  border-radius:var(--radius-sm); transition:transform 0.1s;
+  background:var(--bg2); border:1px solid var(--card-border);
+}
+.badge-tile:active { transform:scale(0.92); }
+.badge-tile.earned {
+  background:var(--amber-bg);
+  border-color:var(--amber);
+  box-shadow:0 0 0 1px rgba(217,119,6,0.15);
+}
+.badge-tile.locked {
+  filter:grayscale(1) opacity(0.35);
+}
+.badge-tile.locked:hover { filter:grayscale(1) opacity(0.5); }
+
+.badges-toggle {
+  display:block; margin:6px auto 0;
+  background:none; border:none; cursor:pointer;
+  font-size:11px; color:var(--text3); font-family:var(--mono);
+}
+.badges-toggle:hover { color:var(--text2); }
+
+/* Detail modal for a single badge */
+#badgeDetailModal .modal-sheet { max-width:340px; text-align:center; }
+.badge-detail-emoji {
+  font-size:64px; line-height:1; margin:8px 0 12px;
+}
+.badge-detail-title {
+  font-size:18px; font-weight:700; margin-bottom:6px;
+}
+.badge-detail-status {
+  display:inline-block; font-size:10px; font-weight:700;
+  text-transform:uppercase; letter-spacing:0.5px;
+  padding:3px 10px; border-radius:10px; margin-bottom:12px;
+}
+.badge-detail-status.earned {
+  background:var(--amber-bg); color:var(--amber);
+}
+.badge-detail-status.locked {
+  background:var(--bg2); color:var(--text3);
+}
+.badge-detail-desc {
+  font-size:13px; color:var(--text2); line-height:1.5;
+  margin-bottom:8px;
+}
+.badge-detail-date {
+  font-size:11px; color:var(--text3); font-family:var(--mono);
+}
+
+/* Toast variant for newly-earned badges (uses #appToast container, but
+   stylized with a celebratory amber accent + a slight bounce). */
+#appToast.badge {
+  border-left:4px solid var(--amber);
+  background:var(--card);
+}
+#appToast.badge .toast-emoji { font-size:24px; margin-right:8px; }
+@keyframes badgeBounce {
+  0%, 100% { transform:translate(-50%, 0); }
+  50%      { transform:translate(-50%, -8px); }
+}
+#appToast.badge { animation:badgeBounce 0.4s ease-out 0.2s; }
 
 /* --- RADAR --- */
 .radar-section {
@@ -705,9 +799,9 @@ textarea.form-input { resize:vertical; min-height:60px; }
             <input class="form-input" id="detailVariation" placeholder="Variation" style="flex:1">
           </div>
           <div class="form-row">
-            <input class="form-input" id="detailSets" placeholder="Sets" type="number" style="flex:0 0 90px">
+            <input class="form-input" id="detailSets" placeholder="Sets" type="number" style="flex:0 0 100px">
             <span style="color:var(--text3)">×</span>
-            <input class="form-input" id="detailReps" placeholder="Reps" type="number" style="flex:0 0 90px">
+            <input class="form-input" id="detailReps" placeholder="Reps" type="number" style="flex:0 0 100px">
           </div>
           <div class="form-row">
             <input class="form-input" id="detailWeight" placeholder="Weight/band (opt)">
@@ -719,7 +813,11 @@ textarea.form-input { resize:vertical; min-height:60px; }
     </div>
     <div class="stats-row" id="habitsStats"></div>
     <div class="streak-row" id="streakRow"></div>
-    <div class="milestone-row" id="milestoneRow"></div>
+
+    <!-- v3.1.1: badges moved to Export tab to declutter Habits.
+         Legacy milestoneRow kept hidden for any cached older payloads. -->
+    <div class="milestone-row" id="milestoneRow" style="display:none"></div>
+
     <div class="card">
       <div class="card-title">Weekly Notes</div>
       <textarea class="form-input" id="weeklyNotes" placeholder="Notes for this week..."></textarea>
@@ -985,6 +1083,22 @@ textarea.form-input { resize:vertical; min-height:60px; }
 
   <!-- TAB: EXPORT -->
   <div class="tab-content" id="tabExport">
+    <!-- v3.1.1: Badges live here now (moved from Habits to declutter that
+         tab). The Export tab is the natural home for review/admin content
+         the user visits occasionally rather than daily. Above the export
+         action because badges are more visually engaging — they earn the
+         hero slot. The export button is below as a utility. -->
+    <div class="card">
+      <div class="badges-section" id="badgesSection">
+        <div class="badges-header">
+          <span class="badges-title">🏅 Badges</span>
+          <span class="badges-count" id="badgesCount"></span>
+        </div>
+        <div class="badge-grid collapsed" id="badgeGrid"></div>
+        <button class="badges-toggle" id="badgesToggle">Show all</button>
+      </div>
+    </div>
+
     <div class="card" style="text-align:center">
       <div class="card-title">Generate AI Coaching Summary</div>
       <div style="display:flex;gap:8px;justify-content:center;margin-bottom:16px">
@@ -1119,6 +1233,21 @@ textarea.form-input { resize:vertical; min-height:60px; }
   </div>
 </div>
 
+<!-- Badge detail modal (Turn 3). Reused for both earned and locked badges;
+     content is populated dynamically by openBadgeDetail(). For earned, shows
+     the date earned; for locked, shows the qualification description so the
+     user knows what to do to unlock it. -->
+<div class="modal-overlay" id="badgeDetailModal">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeModal('badgeDetailModal')">×</button>
+    <div class="badge-detail-emoji" id="badgeDetailEmoji">🏅</div>
+    <div class="badge-detail-title" id="badgeDetailTitle"></div>
+    <div class="badge-detail-status" id="badgeDetailStatus"></div>
+    <div class="badge-detail-desc" id="badgeDetailDesc"></div>
+    <div class="badge-detail-date" id="badgeDetailDate"></div>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // FITNESS TRACKER v2 — FRONTEND
@@ -1205,6 +1334,21 @@ function toast(message, kind, ms) {
   el.style.display = 'block';
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.style.display = 'none'; }, ms || 4000);
+}
+
+// v3.1.2: clear *all* per-week habit caches (keys are "ft_habits_<weekstr>").
+// Replaces the buggy `removeItem('ft_habits')` which targeted a key that
+// never existed, silently leaving caches stale after auto-chip events.
+// Used by sleep save (Night auto-chip) and run save (Run auto-chip) so the
+// next loadHabitsWeek refetches authoritative data instead of showing the
+// pre-auto-chip cached state.
+function invalidateHabitsCache() {
+  const toRemove = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.indexOf('ft_habits_') === 0) toRemove.push(k);
+  }
+  toRemove.forEach(k => localStorage.removeItem(k));
 }
 
 // === BIOMETRIC FLAG UI (Turn 1) ==============================================
@@ -1436,11 +1580,19 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById(btn.dataset.tab).classList.add('active');
+    // v3.1.2 perf: if the user just left the Habits tab after rapid chip
+    // tapping, flush any deferred badge check now. The Export tab also
+    // re-fetches badges on open, so a flush here ensures the navigator
+    // sees fresh state across the app.
+    flushPendingBadgesIfNeeded();
     // Trigger tab-specific loads
     if (btn.dataset.tab === 'tabRun') loadRunTab();
     if (btn.dataset.tab === 'tabBody') loadBodyTab();
     if (btn.dataset.tab === 'tabClimb') loadClimbTab();
     if (btn.dataset.tab === 'tabBenchmark') loadBenchmarkTab();
+    // v3.1.1: Export tab houses the badge grid. Refresh on open so any
+    // badges earned since cold-start (e.g. via background sync) appear.
+    if (btn.dataset.tab === 'tabExport') loadBadges();
   });
 });
 
@@ -1803,6 +1955,7 @@ function bindQuestionnaireNav() {
       document.getElementById('qNextBtn').textContent = 'Submit';
       return;
     }
+    celebrateIfBadges(resp);
 
     showQuestionnaireResult(resp);
     // Refresh background state: history + radar both consume the new data
@@ -2047,8 +2200,17 @@ function saveCurrentDayHabit(day) {
     // (from Climb sessions, Strava syncs, and sleep entries with Night Shift
     // respectively). Omitting them from the payload signals the backend to
     // preserve whatever it has — protects against stale-state clobbers.
+    //
+    // v3.1.2 perf: chip taps are high-frequency (5+/min when filling out a
+    // week) so we pass skipBadges=1 to skip the ~300ms badge context build.
+    // The flushPendingBadges call below catches any earned badges when the
+    // user pauses (tab switch / page unload). Net: chip taps go from
+    // ~600ms to ~50ms; badge celebrations arrive seconds later instead of
+    // immediately, which is fine because chip-tap badges are streak ones
+    // that are inherently delayed (you don't earn a 7-day streak on a
+    // single tap, you earn it at midnight after 7 days of taps).
     api('saveHabit', {
-      week, day,
+      week, day, skipBadges: 1,
       stretch: data.Stretch || false,
       ring: data.Ring || false,
       bw: data.BW || false,
@@ -2056,6 +2218,7 @@ function saveCurrentDayHabit(day) {
       sport: data.Sport || false,
       notes: data.Notes || ''
     });
+    pendingBadgeFlush = true;
   });
   // Cache
   localStorage.setItem('ft_habits_' + week, JSON.stringify(weekHabits));
@@ -2316,7 +2479,8 @@ document.getElementById('btnSaveClimb').addEventListener('click', async () => {
     document.getElementById('btnSaveClimb').textContent = 'Save session';
     document.getElementById('btnCancelClimbEdit').style.display = 'none';
   } else {
-    await api('saveClimbSession', params);
+    const resp = await api('saveClimbSession', params);
+    celebrateIfBadges(resp);
   }
   currentRoutes = [];
   renderRouteList();
@@ -2408,7 +2572,8 @@ document.getElementById('btnStravaConnect').addEventListener('click', async () =
 });
 
 document.getElementById('btnRefreshRuns').addEventListener('click', async () => {
-  await api('syncStrava', { limit: 30 });
+  const resp = await api('syncStrava', { limit: 30 });
+  celebrateIfBadges(resp);
   await loadRuns();
   // v3: Strava sync auto-chips Run on Habits for each new run's date.
   // Refresh current week's Habits state so the chip updates without a reload.
@@ -2460,6 +2625,7 @@ document.getElementById('btnSaveManualRun').addEventListener('click', async () =
   }
   btn.textContent = '✓ Saved';
   setTimeout(() => { btn.textContent = 'Save entry'; }, 1200);
+  celebrateIfBadges(resp);
 
   // Clear optional fields, keep type + date for quick subsequent entries
   document.getElementById('manualRunDistance').value = '';
@@ -2471,7 +2637,7 @@ document.getElementById('btnSaveManualRun').addEventListener('click', async () =
   // Refresh list; refresh Habits chips if Run type (backend auto-chipped).
   loadRuns();
   if (type === 'Run') {
-    localStorage.removeItem('ft_habits');
+    invalidateHabitsCache();
     loadHabitsWeek();
   }
 });
@@ -2702,6 +2868,11 @@ document.getElementById('btnSaveBody').addEventListener('click', async () => {
   } else if (resp && resp.success) {
     toast('✓ Saved', 'ok', 1500);
   }
+  // Turn 3: badge toasts come after, with a small delay so they don't
+  // collide with the save-confirmation toast above.
+  if (resp && resp.newlyEarned && resp.newlyEarned.length) {
+    setTimeout(() => celebrateIfBadges(resp), 1700);
+  }
 });
 
 document.getElementById('btnSyncHealth').addEventListener('click', () => {
@@ -2775,7 +2946,7 @@ document.getElementById('btnSaveSleep').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Saving…';
   try {
-    await api('saveMeasurement', {
+    const resp = await api('saveMeasurement', {
       Date: date,
       Bedtime: bedtime || '',
       WakeTime: wakeTime || '',
@@ -2786,10 +2957,11 @@ document.getElementById('btnSaveSleep').addEventListener('click', async () => {
     // If night-shift was ticked, the backend has already flipped the Night
     // chip on the Habits tab — refresh that cache so a subsequent tab switch
     // doesn't show stale state.
-    if (nightShift) localStorage.removeItem('ft_habits');
+    if (nightShift) invalidateHabitsCache();
     btn.textContent = '✓ Saved';
     setTimeout(() => { btn.textContent = 'Save sleep'; btn.disabled = false; }, 1200);
     loadBodyTab();
+    celebrateIfBadges(resp);
   } catch(err) {
     btn.textContent = 'Save sleep';
     btn.disabled = false;
@@ -2807,12 +2979,13 @@ document.querySelectorAll('#moodPicker .mood-emoji').forEach(el => {
     document.querySelectorAll('#moodPicker .mood-emoji').forEach(e => e.classList.remove('active'));
     el.classList.add('active');
     try {
-      await api('saveMeasurement', {
+      const resp = await api('saveMeasurement', {
         Date: localDate(),
         Mood: mood,
         Source: 'Manual'
       });
       loadBodyTab();
+      celebrateIfBadges(resp);
     } catch(err) {
       alert('Failed to save mood: ' + err.message);
     } finally {
@@ -2924,11 +3097,12 @@ document.getElementById('btnSaveBench').addEventListener('click', async () => {
     time: document.getElementById('benchTime').value,
     notes: document.getElementById('benchNotes').value.trim()
   };
-  await api('saveBenchmark', params);
+  const resp = await api('saveBenchmark', params);
   // Clear value + notes (but keep type/date/time selected for quick repeat entry)
   document.getElementById('benchValue').value = '';
   document.getElementById('benchNotes').value = '';
   await loadBenchmarkTab();
+  celebrateIfBadges(resp);
 });
 
 // Render one card per tracked type, each showing PR + latest + collapsible history.
@@ -3388,14 +3562,167 @@ function renderMetricToggles() {
 }
 
 // --- MILESTONES ---
-async function loadMilestones() {
-  const data = await api('getMilestones');
-  if (!data || !Array.isArray(data)) return;
-  const container = document.getElementById('milestoneRow');
-  container.innerHTML = '';
-  data.forEach(m => {
-    container.innerHTML += `<span class="milestone">🏅 ${m.Label}</span>`;
+// === BADGES (Turn 3) =========================================================
+// Renders the badge grid on the Habits tab and handles the detail modal,
+// toast for newly-earned badges, and the collapse/expand toggle.
+//
+// Data source: getMilestonesV2 returns { earned, locked, total }. When called
+// from the bundle path, this whole structure is already in memory — we just
+// pass it to renderBadges. When called standalone (legacy fallback), we
+// fetch it explicitly.
+//
+// Caching: rendered grid is cached so the Habits tab repaints instantly on
+// tab switch, even before the network call returns.
+
+let badgesCollapsed = true;  // grid is collapsed (~2 rows visible) by default
+
+async function loadBadges() {
+  // Cache-first paint
+  const cached = JSON.parse(localStorage.getItem('ft_badges') || 'null');
+  if (cached) renderBadges(cached);
+
+  // Fresh fetch (catches awards earned via Sheets edits that didn't go
+  // through a save endpoint). If the bundle path already populated us,
+  // this is a cheap re-render.
+  const data = await api('getMilestonesV2');
+  if (data && data.earned && data.locked) {
+    localStorage.setItem('ft_badges', JSON.stringify(data));
+    renderBadges(data);
+  }
+}
+
+function renderBadges(data) {
+  const section = document.getElementById('badgesSection');
+  const grid = document.getElementById('badgeGrid');
+  const count = document.getElementById('badgesCount');
+  const toggle = document.getElementById('badgesToggle');
+  if (!section || !grid) return;
+
+  section.style.display = 'block';
+  count.textContent = `${data.earned.length} / ${data.total}`;
+
+  // Earned tiles first (so they're visible in the collapsed view), then locked.
+  // Tiles carry their full metadata in dataset so the click handler doesn't
+  // need to look anything up — minimal coupling.
+  grid.innerHTML = '';
+  const renderTile = (b, isEarned) => {
+    const tile = document.createElement('div');
+    tile.className = 'badge-tile ' + (isEarned ? 'earned' : 'locked');
+    tile.title = b.label;
+    tile.textContent = b.emoji;
+    tile.dataset.id = b.id;
+    tile.dataset.label = b.label;
+    tile.dataset.emoji = b.emoji;
+    tile.dataset.desc = b.description;
+    tile.dataset.earned = isEarned ? '1' : '0';
+    tile.dataset.date = b.date || '';
+    tile.addEventListener('click', () => openBadgeDetail(tile));
+    return tile;
+  };
+  data.earned.forEach(b => grid.appendChild(renderTile(b, true)));
+  data.locked.forEach(b => grid.appendChild(renderTile(b, false)));
+
+  // Toggle button: only visible if there are enough badges to overflow
+  // the collapsed-view height (4 rows of 6 columns ~ 24 tiles is the
+  // typical breakpoint on phone-width).
+  if (data.total <= 12) {
+    toggle.style.display = 'none';
+  } else {
+    toggle.style.display = 'block';
+    toggle.textContent = badgesCollapsed ? 'Show all' : 'Collapse';
+    grid.classList.toggle('collapsed', badgesCollapsed);
+  }
+}
+
+function openBadgeDetail(tile) {
+  const isEarned = tile.dataset.earned === '1';
+  document.getElementById('badgeDetailEmoji').textContent = tile.dataset.emoji;
+  document.getElementById('badgeDetailTitle').textContent = tile.dataset.label;
+  const status = document.getElementById('badgeDetailStatus');
+  status.className = 'badge-detail-status ' + (isEarned ? 'earned' : 'locked');
+  status.textContent = isEarned ? 'Earned' : 'Locked';
+  document.getElementById('badgeDetailDesc').textContent = tile.dataset.desc || '';
+  const dateEl = document.getElementById('badgeDetailDate');
+  dateEl.textContent = (isEarned && tile.dataset.date) ? `Earned ${tile.dataset.date}` : '';
+  openModal('badgeDetailModal');
+}
+
+// Collapse/expand toggle wiring — added once at script init.
+document.addEventListener('DOMContentLoaded', () => {
+  const toggle = document.getElementById('badgesToggle');
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      badgesCollapsed = !badgesCollapsed;
+      const grid = document.getElementById('badgeGrid');
+      if (grid) grid.classList.toggle('collapsed', badgesCollapsed);
+      toggle.textContent = badgesCollapsed ? 'Show all' : 'Collapse';
+    });
+  }
+});
+
+// Show a celebratory toast when a save returns newlyEarned badges. Reuses
+// the generic toast() helper but with the 'badge' class for amber accent +
+// bounce animation. If multiple badges fire in one save (e.g. crossing
+// 50 sessions also crosses some streak threshold), shows them in sequence
+// 600ms apart so each gets its moment.
+function celebrateNewBadges(badges) {
+  if (!Array.isArray(badges) || !badges.length) return;
+  // Refresh the cache so the grid shows the new earned status next paint
+  loadBadges();
+  badges.forEach((b, i) => {
+    setTimeout(() => {
+      toast(`<span class="toast-emoji">${b.emoji}</span><strong>New badge: ${b.label}</strong><br><span style="font-size:11px;color:var(--text3)">${b.description}</span>`, 'badge', 5000);
+    }, i * 600);
   });
+}
+
+// Convenience wrapper to extract newlyEarned from any save response and
+// celebrate. Save call sites do `celebrateIfBadges(await api(...))` instead
+// of manually checking.
+//
+// v3.1.2: also picks up `streaks` from the response (always present now,
+// piggybacked on the badge check the backend ran anyway). This eliminates
+// a separate getStreaks round-trip after each save — the streak row stays
+// in sync with no extra network cost.
+// v3.1.2 perf: pending-flush state. Set true after any chip-tap save that
+// passed skipBadges=1, cleared after the flush runs. Triggers: tab switch
+// off Habits, page visibility change to hidden, page unload. The flush is
+// fire-and-forget — if it fails (e.g., page is closing), badges will be
+// caught on the next bundle load anyway.
+let pendingBadgeFlush = false;
+
+async function flushPendingBadgesIfNeeded() {
+  if (!pendingBadgeFlush) return;
+  pendingBadgeFlush = false;
+  try {
+    const resp = await api('flushPendingBadges');
+    // Reuse celebrateIfBadges to update streaks + show any earned-badge toasts
+    celebrateIfBadges(resp);
+  } catch (e) { /* non-fatal — next bundle load will catch up */ }
+}
+
+// Triggers for the flush. Three nets so we don't miss the flush regardless
+// of how the user leaves: tab switch within the app, browser tab hidden,
+// page closing.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushPendingBadgesIfNeeded();
+});
+window.addEventListener('pagehide', () => flushPendingBadgesIfNeeded());
+
+function celebrateIfBadges(resp) {
+  if (!resp) return resp;
+  if (resp.streaks) {
+    localStorage.setItem('ft_streaks', JSON.stringify(resp.streaks));
+    if (typeof drawStreakRow === 'function') drawStreakRow(resp.streaks);
+  }
+  if (resp.newlyEarned) celebrateNewBadges(resp.newlyEarned);
+  return resp;
+}
+
+// Legacy alias — pre-Turn 3 code calls loadMilestones() in the init fallback.
+// Route it to the new badge loader so behavior stays correct.
+async function loadMilestones() {
+  return loadBadges();
 }
 
 // --- INIT (Turn 2 — bundle endpoint + cache-first paint) ---
@@ -3503,15 +3830,12 @@ function applyBundle(b) {
     applyRadarPayload(b.radar);
     updateRadarCollapse();
   }
-  // Milestones
-  if (b.milestones && Array.isArray(b.milestones)) {
-    const container = document.getElementById('milestoneRow');
-    if (container) {
-      container.innerHTML = '';
-      b.milestones.forEach(m => {
-        container.innerHTML += `<span class="milestone">🏅 ${m.Label}</span>`;
-      });
-    }
+  // Milestones — Turn 3: bundle now returns the v2 shape {earned, locked,
+  // total} so we can paint the badge grid directly without an extra round-
+  // trip. Also caches it so the next cold-start paints instantly.
+  if (b.milestones && b.milestones.earned && b.milestones.locked) {
+    localStorage.setItem('ft_badges', JSON.stringify(b.milestones));
+    renderBadges(b.milestones);
   }
   // Habits — defer to loadHabitsWeek to handle week switching, but seed cache
   if (b.habits && Array.isArray(b.habits)) {
