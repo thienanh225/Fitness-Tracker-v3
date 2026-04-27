@@ -2948,6 +2948,7 @@ document.getElementById('btnSaveSleep').addEventListener('click', async () => {
   try {
     const resp = await api('saveMeasurement', {
       Date: date,
+      Time: bedtime || wakeTime || '',  // v3.1.3: use bedtime as upsert key so multiple sleeps/naps per day don't overwrite
       Bedtime: bedtime || '',
       WakeTime: wakeTime || '',
       SleepQuality: sleepDraftQuality || '',
