@@ -127,16 +127,8 @@ body { padding-top:var(--safe-top); padding-bottom:calc(64px + var(--safe-bottom
 .chip:not(.active) { color:var(--text3); }
 .chip:not(.active):hover { border-color:var(--c, var(--text3)); }
 .chip.active { background:var(--c, var(--green)); border-color:var(--c, var(--green)); }
-/* v3: auto-chipped activities (Boulder from Climb tab, Run from Strava sync,
-   Night from sleep entry with NightShift toggle) are read-only — dimmed,
-   no hover, and show a tooltip on tap/long-press. */
-.chip.auto-chip { cursor:not-allowed; opacity:0.75; position:relative; }
-.chip.auto-chip::after {
-  content:"⟲"; font-size:10px; margin-left:6px; opacity:0.7;
-  vertical-align:middle; line-height:1;
-}
-.chip.auto-chip:hover { border-color:var(--card-border); }
-.chip.auto-chip.active:hover { border-color:var(--c, var(--green)); }
+/* v3.1.3: Boulder/Run/Night are still auto-chipped from their source tabs
+   but are no longer read-only — user can manually override. */
 
 /* --- FORMS --- */
 .form-row { display:flex; gap:8px; margin-bottom:8px; align-items:center; }
@@ -2108,35 +2100,16 @@ function renderSelectedDay() {
   const dayData = weekHabits[day] || {};
 
   // Chips
-  // v3: Boulder is auto-marked from the Climb tab, Run is auto-marked from
-  // Strava syncs, and Night is auto-marked from the Body tab's sleep entry
-  // (when NightShift is toggled on). All three render read-only here.
-  const AUTO_CHIP_SOURCES = {
-    Boulder: 'Auto-logged from Climb tab',
-    Run: 'Auto-logged from Strava',
-    Night: 'Auto-logged from Body tab · sleep entry'
-  };
+  // v3.1.3: Boulder, Run, Night are auto-chipped from their source tabs
+  // (Climb, Strava, sleep entry) but user can also toggle them manually.
   const chipRow = document.getElementById('habitChips');
   chipRow.innerHTML = '';
   ACTIVITIES.forEach(a => {
     const active = dayData[a] ? 'active' : '';
-    const isAuto = AUTO_CHIP_SOURCES.hasOwnProperty(a);
-    const autoCls = isAuto ? 'auto-chip' : '';
-    const title = isAuto ? ` title="${AUTO_CHIP_SOURCES[a]}"` : '';
-    chipRow.innerHTML += `<div class="chip ${active} ${autoCls}" data-activity="${a}"${title}>${a}</div>`;
+    chipRow.innerHTML += `<div class="chip ${active}" data-activity="${a}">${a}</div>`;
   });
   chipRow.querySelectorAll('.chip').forEach(chip => {
     const act = chip.dataset.activity;
-    // Auto-chips: no click-to-toggle, but show a brief toast-style alert so
-    // the user understands why the tap did nothing.
-    if (AUTO_CHIP_SOURCES.hasOwnProperty(act)) {
-      chip.addEventListener('click', () => {
-        // Soft feedback — alert is crude but zero-dep and fine on iOS
-        // for a rarely-hit path. Could upgrade to a toast later.
-        alert(AUTO_CHIP_SOURCES[act] + '. Log a session in the relevant tab to mark this automatically.');
-      });
-      return;
-    }
     chip.addEventListener('click', () => {
       if (!weekHabits[day]) weekHabits[day] = {};
       weekHabits[day][act] = !weekHabits[day][act];
@@ -2196,26 +2169,25 @@ function saveCurrentDayHabit(day) {
   const week = getWeekString(currentWeekOffset);
   const data = weekHabits[day] || {};
   debounce('habit_' + week + day, () => {
-    // v3: Boulder, Run, and Night are auto-managed by the backend
-    // (from Climb sessions, Strava syncs, and sleep entries with Night Shift
-    // respectively). Omitting them from the payload signals the backend to
-    // preserve whatever it has — protects against stale-state clobbers.
+    // v3.1.3: all chips now included in the payload. Boulder, Run, Night
+    // are still auto-chipped from their source tabs but user can manually
+    // override. Previous behavior omitted them to protect auto-state; now
+    // that they're tappable, the frontend is the authority on toggle state.
     //
     // v3.1.2 perf: chip taps are high-frequency (5+/min when filling out a
     // week) so we pass skipBadges=1 to skip the ~300ms badge context build.
     // The flushPendingBadges call below catches any earned badges when the
-    // user pauses (tab switch / page unload). Net: chip taps go from
-    // ~600ms to ~50ms; badge celebrations arrive seconds later instead of
-    // immediately, which is fine because chip-tap badges are streak ones
-    // that are inherently delayed (you don't earn a 7-day streak on a
-    // single tap, you earn it at midnight after 7 days of taps).
+    // user pauses (tab switch / page unload).
     api('saveHabit', {
       week, day, skipBadges: 1,
       stretch: data.Stretch || false,
+      boulder: data.Boulder || false,
       ring: data.Ring || false,
       bw: data.BW || false,
       leg: data.Leg || false,
+      run: data.Run || false,
       sport: data.Sport || false,
+      night: data.Night || false,
       notes: data.Notes || ''
     });
     pendingBadgeFlush = true;
