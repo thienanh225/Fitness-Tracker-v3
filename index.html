@@ -67,6 +67,20 @@ body { padding-top:var(--safe-top); padding-bottom:calc(64px + var(--safe-bottom
 .sync-dot.ok { background:var(--green); }
 .sync-dot.syncing { background:var(--amber); animation:pulse 1s infinite; }
 .sync-dot.offline { background:var(--coral); }
+/* v3.2.0 offline: amber non-pulsing dot signals queued mutations awaiting drain. */
+.sync-dot.pending { background:var(--amber); }
+.sync-trigger { cursor:pointer; user-select:none; }
+/* Pending Climb session card — visually similar to a real card but tagged. */
+.session-card.pending { opacity:0.85; border-left:3px solid var(--amber); }
+.pending-pill { display:inline-block; background:var(--amber); color:#000;
+  font-size:11px; font-weight:600; padding:2px 6px; border-radius:8px; margin-left:6px; }
+/* Pending queue modal contents. */
+.pending-list { max-height:50vh; overflow-y:auto; margin:8px 0; }
+.pending-item { padding:8px 10px; border-bottom:1px solid var(--border); font-size:13px; }
+.pending-item:last-child { border-bottom:none; }
+.pending-item .pi-action { font-weight:600; }
+.pending-item .pi-time { color:var(--text3); font-size:12px; }
+.pending-empty { color:var(--text3); padding:14px; text-align:center; font-size:13px; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 .sync-label { font-size:11px; color:var(--text3); font-family:var(--mono); }
 .btn-icon {
@@ -746,8 +760,10 @@ textarea.form-input { resize:vertical; min-height:60px; }
 <header class="app-header">
   <div class="app-title" id="appTitle">Fitness Tracker</div>
   <div class="header-right">
-    <span class="sync-dot offline" id="syncDot"></span>
-    <span class="sync-label" id="syncLabel">Offline</span>
+    <span class="sync-trigger" id="syncTrigger" title="Tap to view sync status">
+      <span class="sync-dot offline" id="syncDot"></span>
+      <span class="sync-label" id="syncLabel">Offline</span>
+    </span>
     <button class="btn-icon" id="btnProfile" title="Profile">⚙</button>
   </div>
 </header>
@@ -1244,6 +1260,19 @@ textarea.form-input { resize:vertical; min-height:60px; }
   </div>
 </div>
 
+<!-- v3.2.0 offline: pending sync modal — opened by tapping the sync indicator. -->
+<div class="modal-overlay" id="pendingModal">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="closeModal('pendingModal')">×</button>
+    <h3 style="margin:0 0 8px">Pending sync</h3>
+    <p style="font-size:13px;color:var(--text3);margin:0 0 8px">
+      Saves that couldn't reach the server. They retry automatically when you're online.
+    </p>
+    <div class="pending-list" id="pendingList"></div>
+    <button class="btn btn-primary" id="btnRetryNow" style="width:100%">Retry now</button>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // FITNESS TRACKER v2 — FRONTEND
@@ -1478,31 +1507,210 @@ function hhmmToMinClient(s) {
   return h * 60 + mm;
 }
 
-// --- API ---
-async function api(action, params = {}) {
+// --- API + offline queue (v3.2.0) ---
+//
+// Why: prior to v3.2.0 a save that lost the network silently dropped the
+// user's data — `api()` returned null, the click handler reset its form, and
+// the row never made it to the sheet. This restores the offline cache that
+// existed in earlier versions: failed mutations are persisted to localStorage
+// and replayed when connectivity returns.
+//
+// Two failure shapes are distinguished:
+//   - fetch() throws or backend returns { error }  → transient → queue it.
+//   - backend returns { validationError }         → bad input → don't queue,
+//     hand back to caller so the form can show an alert.
+//
+// Drain triggers: the 'online' window event, the end of every successful
+// api() call, and initApp() at startup. Drain is FIFO, awaits each call,
+// and stops on the first network failure (resumes next trigger). If a queued
+// item ever drains with { validationError } — meaning the data is
+// permanently bad — it's dropped with a toast so the queue can't get stuck.
+
+const QUEUEABLE_ACTIONS = {
+  saveClimbSession: 'Climb session',
+  saveMeasurement: 'Body measurement',
+  saveBenchmark: 'Benchmark',
+  saveManualRun: 'Run',
+  saveMentalAssessment: 'Mental assessment',
+  saveHabitDetail: 'Habit detail',
+  saveProfile: 'Profile'
+};
+const QUEUE_KEY = 'ft_pending_queue';
+
+function getPendingQueue() {
+  try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+function setPendingQueue(q) {
+  if (!q || !q.length) localStorage.removeItem(QUEUE_KEY);
+  else localStorage.setItem(QUEUE_KEY, JSON.stringify(q));
+}
+function _genClientId() {
+  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+}
+function enqueueMutation(action, params) {
+  const q = getPendingQueue();
+  // Reuse a caller-supplied id (sessionId/entryId) when present so the queue
+  // entry's clientId matches the row id used for backend dedupe — handy for
+  // the renderClimbHistory pending-card merge.
+  const clientId = (params && (params.sessionId || params.entryId)) || _genClientId();
+  q.push({ action: action, params: params, clientId: clientId, timestamp: Date.now() });
+  setPendingQueue(q);
+  return clientId;
+}
+
+let _draining = false;
+async function drainQueue() {
+  if (_draining) return;
+  if (!API_URL) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  _draining = true;
+  try {
+    while (true) {
+      const q = getPendingQueue();
+      if (!q.length) break;
+      const item = q[0];
+      const resp = await _rawApi(item.action, item.params);
+      if (resp && resp.validationError) {
+        // Poisoned item — would never succeed. Drop and notify so the queue
+        // doesn't lock on it forever.
+        q.shift();
+        setPendingQueue(q);
+        try {
+          toast('Couldn\'t sync ' + (QUEUEABLE_ACTIONS[item.action] || item.action) +
+                ' — item discarded (' + resp.validationError + ')', 'error', 7000);
+        } catch (e) { /* toast may not exist on early drain */ }
+        continue;
+      }
+      if (!resp || resp.error) {
+        // Network or transient — leave the item, stop, retry next trigger.
+        break;
+      }
+      // Success — pop and refresh the relevant tab so optimistic copies clear.
+      q.shift();
+      setPendingQueue(q);
+      _refreshAfterDrain(item.action);
+    }
+  } finally {
+    _draining = false;
+    setSyncStatus('ok');
+  }
+}
+
+function _refreshAfterDrain(action) {
+  try {
+    if (action === 'saveClimbSession') { loadClimbTab(); invalidateHabitsCache(); loadHabitsWeek(); }
+    else if (action === 'saveMeasurement') loadBodyTab();
+    else if (action === 'saveBenchmark') loadBenchmarkTab();
+    else if (action === 'saveManualRun') { loadRuns(); invalidateHabitsCache(); loadHabitsWeek(); }
+    else if (action === 'saveMentalAssessment') { loadMentalHistory(); loadRadar(); }
+    // saveHabitDetail / saveProfile — no required UI refresh; next tab open re-renders.
+  } catch (e) { /* tab may not be loaded — fine */ }
+}
+
+// Single network attempt with no queue logic — used by both api() and drainQueue
+// so retries don't recurse back through the queue.
+async function _rawApi(action, params) {
   if (!API_URL) return null;
-  setSyncStatus('syncing');
   try {
     const resp = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action, ...params })
+      body: JSON.stringify({ action: action, ...params })
     });
-    const data = await resp.json();
-    setSyncStatus('ok');
-    return data;
-  } catch(err) {
+    return await resp.json();
+  } catch (err) {
     console.error('API error:', err);
+    return null;
+  }
+}
+
+async function api(action, params = {}) {
+  if (!API_URL) return null;
+  setSyncStatus('syncing');
+  const data = await _rawApi(action, params);
+
+  // Network failure (fetch threw)
+  if (data === null) {
+    if (QUEUEABLE_ACTIONS[action]) {
+      const clientId = enqueueMutation(action, params);
+      setSyncStatus('ok'); // setSyncStatus shows 'pending' override when queue non-empty
+      return { queued: true, clientId: clientId };
+    }
     setSyncStatus('offline');
     return null;
   }
+  // Validation error — surface to caller, don't queue
+  if (data.validationError) {
+    setSyncStatus('ok');
+    return data;
+  }
+  // Backend exception caught — queue if queueable, else surface
+  if (data.error) {
+    if (QUEUEABLE_ACTIONS[action]) {
+      const clientId = enqueueMutation(action, params);
+      setSyncStatus('ok');
+      return { queued: true, clientId: clientId };
+    }
+    setSyncStatus('ok');
+    return data;
+  }
+  // Success — opportunistic drain for any items waiting from a prior failure
+  setSyncStatus('ok');
+  if (getPendingQueue().length) setTimeout(drainQueue, 0);
+  return data;
 }
 
 function setSyncStatus(status) {
   const dot = document.getElementById('syncDot');
   const label = document.getElementById('syncLabel');
+  if (!dot || !label) return;
+  // Pending overrides 'ok' when the queue is non-empty so the user always
+  // sees that data is waiting. 'syncing'/'offline' take precedence — they
+  // describe a momentary state and pending will reassert when they settle.
+  const pendingCount = getPendingQueue().length;
+  if (pendingCount && status === 'ok') {
+    dot.className = 'sync-dot pending';
+    label.textContent = 'Pending (' + pendingCount + ')';
+    return;
+  }
   dot.className = 'sync-dot ' + (status === 'ok' ? 'ok' : status === 'syncing' ? 'syncing' : 'offline');
   label.textContent = status === 'ok' ? 'Synced' : status === 'syncing' ? 'Syncing…' : 'Offline';
+}
+
+// Client ID minters — match backend prefix conventions for SessionID / EntryID.
+// Used at save-handler call sites so the row id is known before the network
+// trip; backend uses it for retry-safe dedupe.
+function mintSessionId() {
+  return 'S_' + (_genClientId() + '000000000000').slice(0, 12);
+}
+function mintEntryId() {
+  return 'E_' + (_genClientId() + '000000000000').slice(0, 12);
+}
+
+// Pending-queue modal: opened by tapping the sync indicator.
+function openPendingModal() {
+  renderPendingList();
+  openModal('pendingModal');
+}
+function renderPendingList() {
+  const list = document.getElementById('pendingList');
+  if (!list) return;
+  const q = getPendingQueue();
+  if (!q.length) {
+    list.innerHTML = '<div class="pending-empty">Nothing pending — everything is synced.</div>';
+    return;
+  }
+  list.innerHTML = q.map(it => {
+    const label = QUEUEABLE_ACTIONS[it.action] || it.action;
+    const when = new Date(it.timestamp);
+    const ago = Math.max(0, Math.round((Date.now() - it.timestamp) / 60000));
+    const agoLabel = ago < 1 ? 'just now' : (ago + ' min ago');
+    return '<div class="pending-item">' +
+             '<div class="pi-action">' + label + '</div>' +
+             '<div class="pi-time">' + when.toLocaleString() + ' · ' + agoLabel + '</div>' +
+           '</div>';
+  }).join('');
 }
 
 function debounce(key, fn, delay = 1500) {
@@ -1939,16 +2147,31 @@ function bindQuestionnaireNav() {
     document.getElementById('qNextBtn').disabled = true;
     document.getElementById('qNextBtn').textContent = 'Saving…';
 
+    // v3.2.0 offline: client-supplied entryId for retry-safe dedupe.
     const resp = await api('saveMentalAssessment', {
       type: qState.type,
-      answers: qState.answers
+      answers: qState.answers,
+      entryId: mintEntryId()
     });
 
     qState.submitting = false;
+    if (resp && resp.validationError) {
+      alert('Could not save assessment: ' + resp.validationError);
+      document.getElementById('qNextBtn').disabled = false;
+      document.getElementById('qNextBtn').textContent = 'Submit';
+      return;
+    }
     if (!resp || resp.error) {
       alert('Could not save assessment' + (resp && resp.error ? ': ' + resp.error : '. Check connection.'));
       document.getElementById('qNextBtn').disabled = false;
       document.getElementById('qNextBtn').textContent = 'Submit';
+      return;
+    }
+    if (resp.queued) {
+      // Offline: skip the result view (we don't have a server-computed score
+      // yet) and just toast. The assessment is preserved and will sync.
+      toast('Assessment saved offline — will sync when online', 'warn', 3500);
+      closeQuestionnaire();
       return;
     }
     celebrateIfBadges(resp);
@@ -2442,12 +2665,17 @@ function renderRouteList() {
 
 document.getElementById('btnSaveClimb').addEventListener('click', async () => {
   if (currentRoutes.length === 0) return alert('Add at least one route');
+  // v3.2.0 offline: mint the SessionID up front so an offline-queued retry
+  // dedupes against the same row server-side (no double-write). Also lets
+  // renderClimbHistory show a 'pending sync' card for this session before
+  // the network call returns.
   const params = {
     date: document.getElementById('climbDate').value,
     time: document.getElementById('climbTime').value,
     duration: document.getElementById('climbDuration').value,
     location: document.getElementById('climbLocation').value,
-    routes: JSON.stringify(currentRoutes)
+    routes: JSON.stringify(currentRoutes),
+    sessionId: mintSessionId()
   };
   if (climbEditRowIndex) {
     params.rowIndex = climbEditRowIndex;
@@ -2457,6 +2685,13 @@ document.getElementById('btnSaveClimb').addEventListener('click', async () => {
     document.getElementById('btnCancelClimbEdit').style.display = 'none';
   } else {
     const resp = await api('saveClimbSession', params);
+    if (resp && resp.validationError) {
+      alert('Could not save: ' + resp.validationError);
+      return;
+    }
+    if (resp && resp.queued) {
+      toast('Saved offline — will sync when online', 'warn', 3500);
+    }
     celebrateIfBadges(resp);
   }
   currentRoutes = [];
@@ -2482,45 +2717,72 @@ document.getElementById('btnCancelClimbEdit').addEventListener('click', () => {
 function renderClimbHistory(sessions) {
   const container = document.getElementById('climbHistory');
   container.innerHTML = '';
-  if (!sessions.length) { container.innerHTML = '<p style="color:var(--text3);font-size:13px;padding:12px">No sessions yet</p>'; return; }
-  sessions.forEach(s => {
+  // v3.2.0 offline: merge any queued Climb sessions in front of the server
+  // list so the user sees their offline saves immediately. Pending cards are
+  // read-only until they sync — they don't have a server _rowIndex yet, so
+  // Edit/Delete would have nothing to target.
+  const pendingClimb = getPendingQueue()
+    .filter(it => it.action === 'saveClimbSession')
+    .map(it => {
+      const p = it.params || {};
+      let routes = [];
+      try { routes = typeof p.routes === 'string' ? JSON.parse(p.routes) : (p.routes || []); }
+      catch (e) { routes = []; }
+      return {
+        _pending: true,
+        _clientId: it.clientId,
+        Date: p.date || '',
+        Time: p.time || '',
+        Duration: p.duration || '',
+        Location: p.location || '',
+        SessionID: p.sessionId || '',
+        Routes: routes
+      };
+    });
+  // Pending entries first (newest first by timestamp — already FIFO so reverse).
+  const merged = pendingClimb.slice().reverse().concat(sessions);
+  if (!merged.length) { container.innerHTML = '<p style="color:var(--text3);font-size:13px;padding:12px">No sessions yet</p>'; return; }
+  merged.forEach(s => {
     const routes = Array.isArray(s.Routes) ? s.Routes : [];
     const pills = routes.map(r => `<span class="route-pill ${r.result}">${r.grade}</span>`).join('');
+    const isPending = !!s._pending;
     const div = document.createElement('div');
-    div.className = 'session-card';
+    div.className = 'session-card' + (isPending ? ' pending' : '');
     div.innerHTML = `
       <div class="session-header">
-        <span class="session-date">${s.Date}${s.Time ? ' · ' + s.Time : ''}</span>
+        <span class="session-date">${s.Date}${s.Time ? ' · ' + s.Time : ''}${isPending ? '<span class="pending-pill">pending sync</span>' : ''}</span>
         <span class="session-meta">${s.Location || ''} · ${s.Duration || ''}min · ${routes.length} routes</span>
       </div>
       <div class="session-routes">${pills}</div>
-      <div class="session-actions" style="display:none">
+      ${isPending ? '' : `<div class="session-actions" style="display:none">
         <button class="btn btn-secondary btn-sm btn-edit">Edit</button>
         <button class="btn btn-danger btn-sm btn-delete">Delete</button>
-      </div>
+      </div>`}
     `;
-    div.addEventListener('click', (e) => {
-      if (e.target.closest('.btn-edit') || e.target.closest('.btn-delete')) return;
-      const actions = div.querySelector('.session-actions');
-      actions.style.display = actions.style.display === 'none' ? 'flex' : 'none';
-    });
-    div.querySelector('.btn-edit').addEventListener('click', () => {
-      climbEditRowIndex = s._rowIndex;
-      document.getElementById('climbDate').value = s.Date;
-      document.getElementById('climbTime').value = s.Time || '';
-      document.getElementById('climbDuration').value = s.Duration;
-      document.getElementById('climbLocation').value = s.Location;
-      currentRoutes = routes;
-      renderRouteList();
-      document.getElementById('btnSaveClimb').textContent = 'Update session';
-      document.getElementById('btnCancelClimbEdit').style.display = 'block';
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-    div.querySelector('.btn-delete').addEventListener('click', async () => {
-      if (!confirm('Delete this session?')) return;
-      await api('deleteClimbSession', { rowIndex: s._rowIndex });
-      loadClimbTab();
-    });
+    if (!isPending) {
+      div.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-edit') || e.target.closest('.btn-delete')) return;
+        const actions = div.querySelector('.session-actions');
+        actions.style.display = actions.style.display === 'none' ? 'flex' : 'none';
+      });
+      div.querySelector('.btn-edit').addEventListener('click', () => {
+        climbEditRowIndex = s._rowIndex;
+        document.getElementById('climbDate').value = s.Date;
+        document.getElementById('climbTime').value = s.Time || '';
+        document.getElementById('climbDuration').value = s.Duration;
+        document.getElementById('climbLocation').value = s.Location;
+        currentRoutes = routes;
+        renderRouteList();
+        document.getElementById('btnSaveClimb').textContent = 'Update session';
+        document.getElementById('btnCancelClimbEdit').style.display = 'block';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      div.querySelector('.btn-delete').addEventListener('click', async () => {
+        if (!confirm('Delete this session?')) return;
+        await api('deleteClimbSession', { rowIndex: s._rowIndex });
+        loadClimbTab();
+      });
+    }
     container.appendChild(div);
   });
 }
@@ -2595,9 +2857,28 @@ document.getElementById('btnSaveManualRun').addEventListener('click', async () =
     avgHR: avgHR || ''
   });
   btn.disabled = false;
+  // v3.2.0 offline: validationError = bad input (don't retry, surface);
+  // queued = network failure, persisted to queue for later drain.
+  if (resp && resp.validationError) {
+    btn.textContent = 'Save entry';
+    alert('Could not save: ' + resp.validationError);
+    return;
+  }
   if (!resp || resp.error) {
     btn.textContent = 'Save entry';
     alert('Could not save: ' + (resp && resp.error ? resp.error : 'check connection'));
+    return;
+  }
+  if (resp.queued) {
+    btn.textContent = '✓ Queued';
+    toast('Saved offline — will sync when online', 'warn', 3500);
+    setTimeout(() => { btn.textContent = 'Save entry'; }, 1500);
+    // Clear form so the user can move on; queued data is safe.
+    document.getElementById('manualRunDistance').value = '';
+    document.getElementById('manualRunDuration').value = '';
+    document.getElementById('manualRunName').value = '';
+    document.getElementById('manualRunElev').value = '';
+    document.getElementById('manualRunHR').value = '';
     return;
   }
   btn.textContent = '✓ Saved';
@@ -2839,7 +3120,9 @@ document.getElementById('btnSaveBody').addEventListener('click', async () => {
   // Turn 1: if the save produced any out-of-range flags, warn the user.
   // Non-blocking — data is saved either way, but the toast tells them to
   // double-check before the bad value skews the radar.
-  if (resp && resp.flags) {
+  if (resp && resp.queued) {
+    toast('Saved offline — will sync when online', 'warn', 3500);
+  } else if (resp && resp.flags) {
     const msg = formatFlagMessage(resp.flags);
     if (msg) toast(msg, 'warn', 6000);
   } else if (resp && resp.success) {
@@ -2934,10 +3217,15 @@ document.getElementById('btnSaveSleep').addEventListener('click', async () => {
     });
     // If night-shift was ticked, the backend has already flipped the Night
     // chip on the Habits tab — refresh that cache so a subsequent tab switch
-    // doesn't show stale state.
-    if (nightShift) invalidateHabitsCache();
-    btn.textContent = '✓ Saved';
-    setTimeout(() => { btn.textContent = 'Save sleep'; btn.disabled = false; }, 1200);
+    // doesn't show stale state. (Skip when queued — backend hasn't run yet.)
+    if (nightShift && !(resp && resp.queued)) invalidateHabitsCache();
+    if (resp && resp.queued) {
+      btn.textContent = '✓ Queued';
+      toast('Saved offline — will sync when online', 'warn', 3500);
+    } else {
+      btn.textContent = '✓ Saved';
+    }
+    setTimeout(() => { btn.textContent = 'Save sleep'; btn.disabled = false; }, 1500);
     loadBodyTab();
     celebrateIfBadges(resp);
   } catch(err) {
@@ -3068,14 +3356,23 @@ document.getElementById('btnSaveBench').addEventListener('click', async () => {
   const value = document.getElementById('benchValue').value;
   if (!type) return alert('Pick a benchmark type');
   if (!value) return alert('Enter a value');
+  // v3.2.0 offline: client-supplied entryId enables retry-safe dedupe.
   const params = {
     type,
     value: parseFloat(value),
     date: document.getElementById('benchDate').value,
     time: document.getElementById('benchTime').value,
-    notes: document.getElementById('benchNotes').value.trim()
+    notes: document.getElementById('benchNotes').value.trim(),
+    entryId: mintEntryId()
   };
   const resp = await api('saveBenchmark', params);
+  if (resp && resp.validationError) {
+    alert('Could not save: ' + resp.validationError);
+    return;
+  }
+  if (resp && resp.queued) {
+    toast('Saved offline — will sync when online', 'warn', 3500);
+  }
   // Clear value + notes (but keep type/date/time selected for quick repeat entry)
   document.getElementById('benchValue').value = '';
   document.getElementById('benchNotes').value = '';
@@ -3750,6 +4047,14 @@ async function initApp() {
     loadMilestones();
     renderStreaks();
   }
+
+  // v3.2.0 offline: drain anything that was persisted from a previous offline
+  // session. Runs after the bundle so we don't fight the cold-start network
+  // call for the same connection. Drain itself stops on the first failure,
+  // so this is cheap if the network is still down.
+  if (getPendingQueue().length) {
+    setTimeout(drainQueue, 500);
+  }
 }
 
 // Paint UI from localStorage cache without waiting for the network. Each
@@ -3827,6 +4132,24 @@ function applyBundle(b) {
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   const cached = JSON.parse(localStorage.getItem('ft_radar') || 'null');
   if (cached && cached.stats) applyRadarPayload(cached);
+});
+
+// v3.2.0 offline: opportunistic drain when the device regains connectivity.
+// Browsers fire 'online' on actual network state changes (Wi-Fi reconnect,
+// mobile data resume) — this is the cheapest hook that catches "user came
+// back from a tunnel". The drain itself is no-op if the queue is empty.
+window.addEventListener('online', () => {
+  if (getPendingQueue().length) drainQueue();
+});
+
+// v3.2.0 offline: tap the sync indicator to see what's still waiting to sync.
+document.getElementById('syncTrigger').addEventListener('click', openPendingModal);
+
+// v3.2.0 offline: manual force-drain. Useful for testing and for users who
+// want to verify the queue cleared without waiting for the next save.
+document.getElementById('btnRetryNow').addEventListener('click', async () => {
+  await drainQueue();
+  renderPendingList();
 });
 
 initApp();
