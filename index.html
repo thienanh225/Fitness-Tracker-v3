@@ -807,11 +807,14 @@ textarea.form-input { resize:vertical; min-height:60px; }
             <input class="form-input" id="detailVariation" placeholder="Variation" style="flex:1">
           </div>
           <div class="form-row">
-            <!-- v3.1.4: sets/reps switched from fixed flex:0 0 100px to flex:1.
-                 Fixed widths overflowed iPhone portrait (~375px form area). -->
-            <input class="form-input" id="detailSets" placeholder="Sets" type="number" style="flex:1">
+            <!-- v3.1.4: sets/reps switched from fixed flex:0 0 100px to flex:1
+                 + min-width:0. Fixed widths overflowed iPhone portrait. flex:1
+                 alone wasn't enough — input[type=number] has a browser-default
+                 intrinsic min-width that blocks flex-shrink. Same pattern as
+                 .bench-picker-info above. -->
+            <input class="form-input" id="detailSets" placeholder="Sets" type="number" style="flex:1; min-width:0">
             <span style="color:var(--text3)">×</span>
-            <input class="form-input" id="detailReps" placeholder="Reps" type="number" style="flex:1">
+            <input class="form-input" id="detailReps" placeholder="Reps" type="number" style="flex:1; min-width:0">
           </div>
           <div class="form-row">
             <!-- v3.1.4: dropped detailWeight (Weight/band). Added weight or
