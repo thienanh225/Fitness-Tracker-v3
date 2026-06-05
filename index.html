@@ -25,6 +25,7 @@
   --coral: #ef6461; --coral-bg: #fde8e8;
   --pink: #e91e90; --pink-bg: #fce4f0;
   --indigo: #4f46e5; --indigo-bg: #eef2ff;
+  --orange: #f97316; --orange-bg: #fff7ed;
   --radius: 12px; --radius-sm: 8px;
   --shadow: 0 1px 3px rgba(0,0,0,0.06);
   --font: 'DM Sans', -apple-system, sans-serif;
@@ -46,6 +47,7 @@
     --coral: #fb7185; --coral-bg: #2a0f14;
     --pink: #f472b6; --pink-bg: #2a0f20;
     --indigo: #818cf8; --indigo-bg: #161532;
+    --orange: #fb923c; --orange-bg: #2a1800;
     --shadow: 0 1px 3px rgba(0,0,0,0.3);
   }
 }
@@ -138,6 +140,7 @@ body { padding-top:var(--safe-top); padding-bottom:calc(64px + var(--safe-bottom
 .chip[data-activity="Run"] { --c:var(--coral); --cbg:var(--coral-bg); }
 .chip[data-activity="Sport"] { --c:var(--pink); --cbg:var(--pink-bg); }
 .chip[data-activity="Night"] { --c:var(--indigo); --cbg:var(--indigo-bg); }
+.chip[data-activity="Step"] { --c:var(--orange); --cbg:var(--orange-bg); }
 .chip:not(.active) { color:var(--text3); }
 .chip:not(.active):hover { border-color:var(--c, var(--text3)); }
 .chip.active { background:var(--c, var(--green)); border-color:var(--c, var(--green)); }
@@ -795,6 +798,8 @@ textarea.form-input { resize:vertical; min-height:60px; }
     <div class="card">
       <div class="card-title" id="selectedDayLabel">Monday</div>
       <div class="chip-row" id="habitChips"></div>
+      <!-- v3.3.0: read-only steps count row, populated by renderSelectedDay -->
+      <div id="stepsCountRow" style="display:none;margin:6px 0 2px;font-size:12px;color:var(--text3)"></div>
       <div class="detail-panel" id="detailPanel" style="display:none">
         <div class="card-title">Exercise Log</div>
         <div id="detailList"></div>
@@ -1159,6 +1164,8 @@ textarea.form-input { resize:vertical; min-height:60px; }
       <select class="form-select" id="profGender"><option>Male</option><option>Female</option></select>
     </div>
     <div class="form-row"><label style="flex:0.5;font-size:14px;font-weight:500">Height (cm)</label><input class="form-input" id="profHeight" type="number"></div>
+    <!-- v3.3.0: daily steps goal, used by syncSteps to auto-chip Step -->
+    <div class="form-row"><label style="flex:0.5;font-size:14px;font-weight:500">Daily steps goal</label><input class="form-input" id="profStepsGoal" type="number" placeholder="8000"></div>
     <div class="form-row"><label style="flex:0.5;font-size:14px;font-weight:500">Ethnicity</label>
       <select class="form-select" id="profEthnicity">
         <option>Vietnamese</option><option>East Asian</option><option>Southeast Asian</option>
@@ -1302,7 +1309,8 @@ let dashboardMetrics = ['Weight','WaistToHeight','RHR','BodyFat'];
 let debounceTimers = {};
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const ACTIVITIES = ['Stretch','Boulder','Ring','BW','Leg','Run','Sport','Night'];
+// v3.3.0: Step appended — auto-chipped by syncSteps, same treatment as Boulder/Run/Night
+const ACTIVITIES = ['Stretch','Boulder','Ring','BW','Leg','Run','Sport','Night','Step'];
 const ACT_KEYS = { Stretch:'Stretch', Boulder:'Boulder', Ring:'Ring', BW:'BW', Leg:'Leg', Run:'Run', Sport:'Sport', Night:'Night' };
 const ALL_METRICS = [
   { id:'Weight', label:'Weight', unit:'kg',
@@ -2305,7 +2313,7 @@ function renderDayGrid() {
     const dots = ACTIVITIES.filter(a => dayData[a]).map(a => {
       const colors = { Stretch:'var(--green)', Boulder:'var(--purple)', Ring:'var(--blue)',
         BW:'var(--amber)', Leg:'var(--teal)', Run:'var(--coral)', Sport:'var(--pink)',
-        Night:'var(--indigo)' };
+        Night:'var(--indigo)', Step:'var(--orange)' };
       return `<div class="day-dot" style="background:${colors[a]}"></div>`;
     }).join('');
     const isToday = dateStr === localDate();
@@ -2349,10 +2357,27 @@ function renderSelectedDay() {
     });
   });
 
+  // v3.3.0: Steps count row — read-only, shown when step data exists for the day.
+  // Format with comma separator; green tint when goal met.
+  const stepsRow = document.getElementById('stepsCountRow');
+  const rawSteps = dayData.Steps;
+  if (rawSteps !== '' && rawSteps !== undefined && rawSteps !== null) {
+    const count = parseInt(rawSteps) || 0;
+    const goal = parseInt((profile && profile.stepsGoal) || 0) || 8000;
+    const met = count >= goal;
+    const formatted = count.toLocaleString();
+    stepsRow.style.display = 'block';
+    stepsRow.style.color = met ? 'var(--green)' : 'var(--text3)';
+    stepsRow.textContent = met ? `👟 ${formatted} steps ✓` : `👟 ${formatted} steps`;
+  } else {
+    stepsRow.style.display = 'none';
+  }
+
   // Show detail panel if any training chip is active.
   // Stretch is not "training" for this purpose (no exercise detail to add),
-  // and Night is a circumstantial flag (sleep-entry-driven), not training.
-  const hasTraining = ACTIVITIES.some(a => a !== 'Stretch' && a !== 'Night' && dayData[a]);
+  // Night is a circumstantial flag (sleep-entry-driven), and Step is an
+  // auto-counted metric — none of these have exercise detail to add.
+  const hasTraining = ACTIVITIES.some(a => a !== 'Stretch' && a !== 'Night' && a !== 'Step' && dayData[a]);
   const detailPanel = document.getElementById('detailPanel');
   detailPanel.style.display = hasTraining ? 'block' : 'none';
   if (hasTraining) renderDetailList(day);
@@ -2361,8 +2386,8 @@ function renderSelectedDay() {
   const actSelect = document.getElementById('detailActivity');
   actSelect.innerHTML = '<option value="">Activity</option>';
   // Populate activity dropdown for details.
-  // Exclude Stretch (no reps/sets) and Night (not a training activity).
-  ACTIVITIES.filter(a => a !== 'Stretch' && a !== 'Night' && dayData[a]).forEach(a => {
+  // Exclude Stretch (no reps/sets), Night (circumstantial), and Step (metric, not exercise).
+  ACTIVITIES.filter(a => a !== 'Stretch' && a !== 'Night' && a !== 'Step' && dayData[a]).forEach(a => {
     actSelect.innerHTML += `<option value="${a}">${a}</option>`;
   });
 
@@ -2418,6 +2443,8 @@ function saveCurrentDayHabit(day) {
       run: data.Run || false,
       sport: data.Sport || false,
       night: data.Night || false,
+      // v3.3.0: Step is auto-managed by syncSteps but user can manually override
+      step: data.Step || false,
       notes: data.Notes || ''
     });
     pendingBadgeFlush = true;
@@ -2455,7 +2482,8 @@ function renderHabitsStats() {
   let stretchDays = 0, trainingSessions = 0, weeklyScore = 0;
   // v3: Night is a circumstantial flag (from NightShift on sleep entries),
   // not a training session — exclude it from session count and score.
-  const TRAINING_ACTIVITIES = ACTIVITIES.filter(a => a !== 'Stretch' && a !== 'Night');
+  // v3.3.0: Step is a metric chip, not a training session — exclude too.
+  const TRAINING_ACTIVITIES = ACTIVITIES.filter(a => a !== 'Stretch' && a !== 'Night' && a !== 'Step');
   DAYS.forEach(d => {
     const data = weekHabits[d] || {};
     if (data.Stretch) { stretchDays++; weeklyScore += 1; }
@@ -3093,8 +3121,30 @@ function renderBodyHistory(data) {
     const flagBadge = flags.length
       ? `<span class="data-flag-warn" title="Fields out of range: ${flags.join(', ')}">⚠️ check ${flags.join(', ')}</span>`
       : '';
+
+    // v3.3.0: sleep stage secondary line — shown only when stage data is present.
+    // Uses the existing formatSleepDuration helper (stores minutes, displays Hh Mm).
+    const hasStages = r.SleepREM !== '' && r.SleepREM !== undefined && r.SleepREM !== null;
+    const hasSpO2   = r.SpO2    !== '' && r.SpO2    !== undefined && r.SpO2    !== null;
+    let stagesLine = '';
+    if (hasStages) {
+      const rem   = formatSleepDuration(parseInt(r.SleepREM)   || 0);
+      const light = formatSleepDuration(parseInt(r.SleepLight) || 0);
+      const deep  = formatSleepDuration(parseInt(r.SleepDeep)  || 0);
+      const awake = formatSleepDuration(parseInt(r.SleepAwake) || 0);
+      const totalMin = (parseInt(r.SleepREM) || 0) + (parseInt(r.SleepLight) || 0) + (parseInt(r.SleepDeep) || 0);
+      const total = formatSleepDuration(totalMin);
+      stagesLine = `💤 ${total} · REM ${rem} · Light ${light} · Deep ${deep} · Awake ${awake}`;
+      if (hasSpO2) stagesLine += ` · SpO₂ ${parseFloat(r.SpO2).toFixed(1)}%`;
+    } else if (hasSpO2) {
+      stagesLine = `SpO₂ ${parseFloat(r.SpO2).toFixed(1)}%`;
+    }
+    const stagesHtml = stagesLine
+      ? `<br><span style="font-size:11px;color:var(--text3)">${stagesLine}</span>`
+      : '';
+
     container.innerHTML += `<div class="detail-entry">
-      <div class="detail-text"><strong>${sourceIcon}${r.Date}${timeStr}</strong>${flagBadge}<br><span style="font-size:12px;color:var(--text3)">${vals}</span></div>
+      <div class="detail-text"><strong>${sourceIcon}${r.Date}${timeStr}</strong>${flagBadge}<br><span style="font-size:12px;color:var(--text3)">${vals}</span>${stagesHtml}</div>
       <span class="delete-x" data-row="${r._rowIndex}">×</span>
     </div>`;
   });
@@ -3660,8 +3710,8 @@ async function generateExport(weeks) {
   let stretchDays = 0, sessions = 0;
   habits.forEach(h => {
     if (h.Stretch == 1) stretchDays++;
-    // Night is a circumstantial flag (sleep entry), not a training session
-    ACTIVITIES.forEach(a => { if (a !== 'Stretch' && a !== 'Night' && h[a] == 1) sessions++; });
+    // Night is a circumstantial flag (sleep entry); Step is a metric chip — neither counts as training
+    ACTIVITIES.forEach(a => { if (a !== 'Stretch' && a !== 'Night' && a !== 'Step' && h[a] == 1) sessions++; });
   });
   md += `- Stretch days: ${stretchDays}\n- Training sessions: ${sessions}\n`;
 
@@ -3770,7 +3820,9 @@ document.getElementById('btnSaveProfile').addEventListener('click', async () => 
     gender: document.getElementById('profGender').value,
     height: document.getElementById('profHeight').value,
     ethnicity: document.getElementById('profEthnicity').value,
-    dashboardMetrics: JSON.stringify(dashboardMetrics)
+    dashboardMetrics: JSON.stringify(dashboardMetrics),
+    // v3.3.0: steps goal — backend default is 8000 when absent
+    stepsGoal: document.getElementById('profStepsGoal').value || ''
   };
   await api('saveProfile', { fields });
   profile = fields;
@@ -3790,6 +3842,8 @@ async function loadProfile() {
     document.getElementById('profGender').value = data.gender || 'Male';
     document.getElementById('profHeight').value = data.height || '';
     document.getElementById('profEthnicity').value = data.ethnicity || 'Vietnamese';
+    // v3.3.0: steps goal — blank if not yet set so placeholder shows
+    document.getElementById('profStepsGoal').value = data.stepsGoal || '';
     if (data.dashboardMetrics) {
       try { dashboardMetrics = JSON.parse(data.dashboardMetrics); } catch(e) {}
     }
@@ -4091,6 +4145,7 @@ function applyBundle(b) {
     document.getElementById('profGender').value = b.profile.gender || 'Male';
     document.getElementById('profHeight').value = b.profile.height || '';
     document.getElementById('profEthnicity').value = b.profile.ethnicity || 'Vietnamese';
+    document.getElementById('profStepsGoal').value = b.profile.stepsGoal || ''; // v3.3.0
     if (b.profile.dashboardMetrics) {
       try { dashboardMetrics = JSON.parse(b.profile.dashboardMetrics); } catch(e) {}
     }
