@@ -1311,7 +1311,9 @@ let debounceTimers = {};
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 // v3.3.0: Step appended — auto-chipped by syncSteps, same treatment as Boulder/Run/Night
 const ACTIVITIES = ['Stretch','Boulder','Ring','BW','Leg','Run','Sport','Night','Step'];
-const ACT_KEYS = { Stretch:'Stretch', Boulder:'Boulder', Ring:'Ring', BW:'BW', Leg:'Leg', Run:'Run', Sport:'Sport', Night:'Night' };
+// v3.3.1: chips that aren't training sessions — Stretch (no exercise detail),
+// Night (circumstantial, sleep-entry-driven), Step (auto-counted metric).
+const NON_TRAINING = ['Stretch','Night','Step'];
 const ALL_METRICS = [
   { id:'Weight', label:'Weight', unit:'kg',
     format: v => trimFloat(v, 1) },
@@ -2361,7 +2363,7 @@ function renderSelectedDay() {
   // Format with comma separator; green tint when goal met.
   const stepsRow = document.getElementById('stepsCountRow');
   const rawSteps = dayData.Steps;
-  if (rawSteps !== '' && rawSteps !== undefined && rawSteps !== null) {
+  if (rawSteps != null && rawSteps !== '') { // loose != covers undefined too
     const count = parseInt(rawSteps) || 0;
     const goal = parseInt((profile && profile.stepsGoal) || 0) || 8000;
     const met = count >= goal;
@@ -2373,11 +2375,9 @@ function renderSelectedDay() {
     stepsRow.style.display = 'none';
   }
 
-  // Show detail panel if any training chip is active.
-  // Stretch is not "training" for this purpose (no exercise detail to add),
-  // Night is a circumstantial flag (sleep-entry-driven), and Step is an
-  // auto-counted metric — none of these have exercise detail to add.
-  const hasTraining = ACTIVITIES.some(a => a !== 'Stretch' && a !== 'Night' && a !== 'Step' && dayData[a]);
+  // Show detail panel if any training chip is active (NON_TRAINING explains
+  // why Stretch/Night/Step don't count).
+  const hasTraining = ACTIVITIES.some(a => !NON_TRAINING.includes(a) && dayData[a]);
   const detailPanel = document.getElementById('detailPanel');
   detailPanel.style.display = hasTraining ? 'block' : 'none';
   if (hasTraining) renderDetailList(day);
@@ -2385,9 +2385,7 @@ function renderSelectedDay() {
   // Populate activity dropdown for details
   const actSelect = document.getElementById('detailActivity');
   actSelect.innerHTML = '<option value="">Activity</option>';
-  // Populate activity dropdown for details.
-  // Exclude Stretch (no reps/sets), Night (circumstantial), and Step (metric, not exercise).
-  ACTIVITIES.filter(a => a !== 'Stretch' && a !== 'Night' && a !== 'Step' && dayData[a]).forEach(a => {
+  ACTIVITIES.filter(a => !NON_TRAINING.includes(a) && dayData[a]).forEach(a => {
     actSelect.innerHTML += `<option value="${a}">${a}</option>`;
   });
 
@@ -2480,10 +2478,8 @@ document.getElementById('btnAddDetail').addEventListener('click', async () => {
 function renderHabitsStats() {
   const week = getWeekString(currentWeekOffset);
   let stretchDays = 0, trainingSessions = 0, weeklyScore = 0;
-  // v3: Night is a circumstantial flag (from NightShift on sleep entries),
-  // not a training session — exclude it from session count and score.
-  // v3.3.0: Step is a metric chip, not a training session — exclude too.
-  const TRAINING_ACTIVITIES = ACTIVITIES.filter(a => a !== 'Stretch' && a !== 'Night' && a !== 'Step');
+  // Sessions and score count only real training — NON_TRAINING has the exclusions.
+  const TRAINING_ACTIVITIES = ACTIVITIES.filter(a => !NON_TRAINING.includes(a));
   DAYS.forEach(d => {
     const data = weekHabits[d] || {};
     if (data.Stretch) { stretchDays++; weeklyScore += 1; }
@@ -3124,21 +3120,20 @@ function renderBodyHistory(data) {
 
     // v3.3.0: sleep stage secondary line — shown only when stage data is present.
     // Uses the existing formatSleepDuration helper (stores minutes, displays Hh Mm).
-    const hasStages = r.SleepREM !== '' && r.SleepREM !== undefined && r.SleepREM !== null;
-    const hasSpO2   = r.SpO2    !== '' && r.SpO2    !== undefined && r.SpO2    !== null;
-    let stagesLine = '';
+    // v3.3.1 refactor: parse stage minutes once, build the line from parts —
+    // total derives from the same ints and SpO2 isn't duplicated across branches.
+    // (stageParts, not parts — `parts` already builds `vals` in this block.)
+    const hasStages = r.SleepREM != null && r.SleepREM !== '';
+    const hasSpO2   = r.SpO2    != null && r.SpO2    !== '';
+    const stageParts = [];
     if (hasStages) {
-      const rem   = formatSleepDuration(parseInt(r.SleepREM)   || 0);
-      const light = formatSleepDuration(parseInt(r.SleepLight) || 0);
-      const deep  = formatSleepDuration(parseInt(r.SleepDeep)  || 0);
-      const awake = formatSleepDuration(parseInt(r.SleepAwake) || 0);
-      const totalMin = (parseInt(r.SleepREM) || 0) + (parseInt(r.SleepLight) || 0) + (parseInt(r.SleepDeep) || 0);
-      const total = formatSleepDuration(totalMin);
-      stagesLine = `💤 ${total} · REM ${rem} · Light ${light} · Deep ${deep} · Awake ${awake}`;
-      if (hasSpO2) stagesLine += ` · SpO₂ ${parseFloat(r.SpO2).toFixed(1)}%`;
-    } else if (hasSpO2) {
-      stagesLine = `SpO₂ ${parseFloat(r.SpO2).toFixed(1)}%`;
+      const [rem, light, deep, awake] = ['SleepREM','SleepLight','SleepDeep','SleepAwake'].map(k => parseInt(r[k]) || 0);
+      stageParts.push(`💤 ${formatSleepDuration(rem + light + deep)}`,
+        `REM ${formatSleepDuration(rem)}`, `Light ${formatSleepDuration(light)}`,
+        `Deep ${formatSleepDuration(deep)}`, `Awake ${formatSleepDuration(awake)}`);
     }
+    if (hasSpO2) stageParts.push(`SpO₂ ${parseFloat(r.SpO2).toFixed(1)}%`);
+    const stagesLine = stageParts.join(' · ');
     const stagesHtml = stagesLine
       ? `<br><span style="font-size:11px;color:var(--text3)">${stagesLine}</span>`
       : '';
@@ -3710,8 +3705,8 @@ async function generateExport(weeks) {
   let stretchDays = 0, sessions = 0;
   habits.forEach(h => {
     if (h.Stretch == 1) stretchDays++;
-    // Night is a circumstantial flag (sleep entry); Step is a metric chip — neither counts as training
-    ACTIVITIES.forEach(a => { if (a !== 'Stretch' && a !== 'Night' && a !== 'Step' && h[a] == 1) sessions++; });
+    // Only real training counts — NON_TRAINING has the exclusions
+    ACTIVITIES.forEach(a => { if (!NON_TRAINING.includes(a) && h[a] == 1) sessions++; });
   });
   md += `- Stretch days: ${stretchDays}\n- Training sessions: ${sessions}\n`;
 
@@ -3822,7 +3817,7 @@ document.getElementById('btnSaveProfile').addEventListener('click', async () => 
     ethnicity: document.getElementById('profEthnicity').value,
     dashboardMetrics: JSON.stringify(dashboardMetrics),
     // v3.3.0: steps goal — backend default is 8000 when absent
-    stepsGoal: document.getElementById('profStepsGoal').value || ''
+    stepsGoal: document.getElementById('profStepsGoal').value
   };
   await api('saveProfile', { fields });
   profile = fields;
