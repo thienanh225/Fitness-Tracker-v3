@@ -2411,7 +2411,9 @@ function renderDetailList(day) {
   });
   list.querySelectorAll('.delete-x').forEach(x => {
     x.addEventListener('click', async () => {
-      await api('deleteHabitDetail', { rowIndex: parseInt(x.dataset.row) });
+      // v3.3.1 fix: surface offline deletes instead of silently no-oping.
+      const resp = await api('deleteHabitDetail', { rowIndex: parseInt(x.dataset.row) });
+      if (!resp) { toast('Offline — delete not saved', 'error', 4000); return; }
       await loadHabitDetails();
       renderSelectedDay();
     });
@@ -2504,7 +2506,12 @@ function renderHabitsStats() {
     </div>
   `;
 
-  renderStreaks();
+  // v3.3.1 fix: this runs on every chip tap / day switch, and fetching
+  // getStreaks each time was a redundant round-trip with visible cache→
+  // network flicker (fresh streaks already arrive on save responses and
+  // badge flushes via celebrateIfBadges). Draw from cache here; the real
+  // network refresh happens once per week load in loadHabitsWeek.
+  renderStreaks(true);
 }
 
 // Turn 2: streaks now come from the backend's getStreaks endpoint, which
@@ -2513,10 +2520,16 @@ function renderHabitsStats() {
 // only job is to fetch + render. We cache the last result in localStorage
 // so the streak row paints instantly on tab return; backend response
 // overwrites with authoritative values.
-async function renderStreaks() {
+async function renderStreaks(cacheOnly) {
   // Paint cached state first
   const cached = JSON.parse(localStorage.getItem('ft_streaks') || 'null');
   if (cached) drawStreakRow(cached);
+
+  // v3.3.1: cacheOnly callers (per-tap re-renders) stop here — no fetch.
+  if (cacheOnly) {
+    if (!cached) drawStreakRow({ activity: 0, climbWeek: 0, runWeek: 0 });
+    return;
+  }
 
   // Fetch fresh
   const fresh = await api('getStreaks');
@@ -2569,6 +2582,12 @@ async function loadHabitsWeek() {
         Stretch: r.Stretch == 1, Boulder: r.Boulder == 1, Ring: r.Ring == 1,
         BW: r.BW == 1, Leg: r.Leg == 1, Run: r.Run == 1, Sport: r.Sport == 1,
         Night: r.Night == 1,
+        // v3.3.1 fix: Step/Steps were dropped from this rebuild, so the
+        // steps row vanished after the first refresh and the next chip tap
+        // sent step:false, clobbering the backend's auto-chip. saveHabit
+        // sends every chip, so everything it sends must be rebuilt here.
+        Step: r.Step == 1,
+        Steps: r.Steps,
         Notes: r.Notes || ''
       };
     });
@@ -2706,7 +2725,19 @@ document.getElementById('btnSaveClimb').addEventListener('click', async () => {
   };
   if (climbEditRowIndex) {
     params.rowIndex = climbEditRowIndex;
-    await api('updateClimbSession', params);
+    const resp = await api('updateClimbSession', params);
+    // v3.3.1 fix: updateClimbSession isn't offline-queueable (row indices
+    // can shift before a retry lands), and the old code ignored the null
+    // response — the form reset and the edit was silently lost. Keep the
+    // form in edit mode and tell the user instead.
+    if (!resp) {
+      toast('Offline — edit not saved. Try again when connected.', 'error', 5000);
+      return;
+    }
+    if (resp.validationError) {
+      alert('Could not save: ' + resp.validationError);
+      return;
+    }
     climbEditRowIndex = null;
     document.getElementById('btnSaveClimb').textContent = 'Save session';
     document.getElementById('btnCancelClimbEdit').style.display = 'none';
@@ -2806,7 +2837,10 @@ function renderClimbHistory(sessions) {
       });
       div.querySelector('.btn-delete').addEventListener('click', async () => {
         if (!confirm('Delete this session?')) return;
-        await api('deleteClimbSession', { rowIndex: s._rowIndex });
+        // v3.3.1 fix: deletes aren't offline-queueable; a null response used
+        // to silently no-op (the list refreshed and looked ignored).
+        const resp = await api('deleteClimbSession', { rowIndex: s._rowIndex });
+        if (!resp) { toast('Offline — delete not saved', 'error', 4000); return; }
         loadClimbTab();
       });
     }
@@ -3029,14 +3063,23 @@ async function loadBodyTab() {
   document.querySelectorAll('#moodPicker .mood-emoji').forEach(e => e.classList.remove('active'));
 
   const measurements = await api('getMeasurements', { limit: 100 });
+  let bodyRows;
   if (measurements && Array.isArray(measurements)) {
     localStorage.setItem('ft_body', JSON.stringify(measurements));
-    renderBodyDashboard(measurements);
-    renderBodyHistory(measurements);
+    bodyRows = measurements;
   } else {
-    const cached = JSON.parse(localStorage.getItem('ft_body') || '[]');
-    renderBodyDashboard(cached);
-    renderBodyHistory(cached);
+    bodyRows = JSON.parse(localStorage.getItem('ft_body') || '[]');
+  }
+  renderBodyDashboard(bodyRows);
+  renderBodyHistory(bodyRows);
+
+  // v3.3.1 fix: the blanket highlight clear above ran on the reload a mood
+  // save triggers, so the tapped emoji flashed then went dark. Re-apply the
+  // saved state: rows are newest-first, so the first match is today's latest.
+  const todayMoodRow = bodyRows.find(r => r.Date === localDate() && r.Mood);
+  if (todayMoodRow) {
+    const moodEl = document.querySelector('#moodPicker .mood-emoji[data-mood="' + parseInt(todayMoodRow.Mood) + '"]');
+    if (moodEl) moodEl.classList.add('active');
   }
 
   // v3 Phase 5: pull assessment history alongside biometrics so the Mental
@@ -3145,7 +3188,9 @@ function renderBodyHistory(data) {
   });
   container.querySelectorAll('.delete-x').forEach(x => {
     x.addEventListener('click', async () => {
-      await api('deleteMeasurement', { rowIndex: parseInt(x.dataset.row) });
+      // v3.3.1 fix: surface offline deletes instead of silently no-oping.
+      const resp = await api('deleteMeasurement', { rowIndex: parseInt(x.dataset.row) });
+      if (!resp) { toast('Offline — delete not saved', 'error', 4000); return; }
       loadBodyTab();
     });
   });
@@ -3525,7 +3570,9 @@ function renderBenchHistory(container, type, entries, prEntry) {
     row.querySelector('.delete-x').addEventListener('click', async (ev) => {
       ev.stopPropagation();
       if (!confirm('Delete this entry?')) return;
-      await api('deleteBenchmark', { rowIndex: parseInt(e._rowIndex) });
+      // v3.3.1 fix: surface offline deletes instead of silently no-oping.
+      const resp = await api('deleteBenchmark', { rowIndex: parseInt(e._rowIndex) });
+      if (!resp) { toast('Offline — delete not saved', 'error', 4000); return; }
       await loadBenchmarkTab();
     });
     container.appendChild(row);
@@ -3697,7 +3744,10 @@ async function generateExport(weeks) {
   const data = await api('getExportData', { weeks: String(weeks) });
   if (!data) return;
 
-  let md = `# Fitness Summary (${data.dateRange.start} → ${data.dateRange.end})\n\n`;
+  // v3.3.1 fix: don't hard-crash the export on a response missing dateRange
+  // (a truthy error object used to throw an uncaught TypeError here).
+  const range = data.dateRange || {};
+  let md = `# Fitness Summary (${range.start || '?'} → ${range.end || '?'})\n\n`;
 
   // Habits
   md += `## Habits\n`;
