@@ -888,8 +888,15 @@ textarea.form-input { resize:vertical; min-height:60px; }
               <span class="style-chip" data-style="Power">Power</span>
               <span class="style-chip" data-style="Crimpy">Crimpy</span>
               <span class="style-chip" data-style="Coordination">Coord</span>
+              <span class="style-chip" data-style="Sloper">Sloper</span>
+              <span class="style-chip" data-style="Pinchy">Pinchy</span>
+              <span class="style-chip" data-style="Pockets">Pockets</span>
+              <span class="style-chip" data-style="Compression">Compression</span>
+              <span class="style-chip" data-style="Heel Hook">Heel hook</span>
+              <span class="style-chip" data-style="Mantle">Mantle</span>
             </div>
           </div>
+          <input class="form-input" id="routeNote" placeholder="Route notes (beta, feel...)" style="width:100%;margin-bottom:8px">
           <button class="btn btn-secondary btn-sm" id="btnAddRoute">+ Add route</button>
         </div>
       </div>
@@ -2688,12 +2695,14 @@ document.getElementById('btnAddRoute').addEventListener('click', () => {
     result: document.getElementById('routeResult').value,
     attempts: parseInt(document.getElementById('routeAttempts').value) || 1,
     wall: document.getElementById('routeWall').value,
-    styles
+    styles,
+    notes: document.getElementById('routeNote').value.trim()
   };
   currentRoutes.push(route);
   renderRouteList();
-  // Reset styles
+  // Reset styles + note
   document.querySelectorAll('#routeStyles .style-chip').forEach(c => c.classList.remove('active'));
+  document.getElementById('routeNote').value = '';
 });
 
 function renderRouteList() {
@@ -2701,10 +2710,13 @@ function renderRouteList() {
   list.innerHTML = '';
   currentRoutes.forEach((r, i) => {
     const styles = (r.styles || []).join(', ');
-    list.innerHTML += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
-      <span class="route-pill ${r.result}">${r.grade} ${r.result}${r.attempts > 1 ? ' ('+r.attempts+')' : ''}</span>
-      <span style="font-size:11px;color:var(--text3)">${r.wall || ''} ${styles}</span>
-      <span class="delete-x" onclick="currentRoutes.splice(${i},1);renderRouteList()">×</span>
+    list.innerHTML += `<div style="margin-bottom:4px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span class="route-pill ${r.result}">${r.grade} ${r.result}${r.attempts > 1 ? ' ('+r.attempts+')' : ''}</span>
+        <span style="font-size:11px;color:var(--text3)">${r.wall || ''} ${styles}</span>
+        <span class="delete-x" onclick="currentRoutes.splice(${i},1);renderRouteList()">×</span>
+      </div>
+      ${r.notes ? `<div style="font-size:11px;color:var(--text3);margin:2px 0 0 4px">${escapeHtml(r.notes)}</div>` : ''}
     </div>`;
   });
 }
