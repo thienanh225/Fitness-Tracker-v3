@@ -2712,13 +2712,39 @@ function renderRouteList() {
     const styles = (r.styles || []).join(', ');
     list.innerHTML += `<div style="margin-bottom:4px">
       <div style="display:flex;align-items:center;gap:6px">
-        <span class="route-pill ${r.result}">${r.grade} ${r.result}${r.attempts > 1 ? ' ('+r.attempts+')' : ''}</span>
-        <span style="font-size:11px;color:var(--text3)">${r.wall || ''} ${styles}</span>
+        <span style="display:flex;align-items:center;gap:6px;flex:1;cursor:pointer" onclick="editRoute(${i})">
+          <span class="route-pill ${r.result}">${r.grade} ${r.result}${r.attempts > 1 ? ' ('+r.attempts+')' : ''}</span>
+          <span style="font-size:11px;color:var(--text3)">${r.wall || ''} ${styles}</span>
+        </span>
+        <span style="color:var(--text3);cursor:pointer;padding:4px 8px" title="Log same route again" onclick="duplicateRoute(${i})">⧉</span>
         <span class="delete-x" onclick="currentRoutes.splice(${i},1);renderRouteList()">×</span>
       </div>
       ${r.notes ? `<div style="font-size:11px;color:var(--text3);margin:2px 0 0 4px">${escapeHtml(r.notes)}</div>` : ''}
     </div>`;
   });
+}
+
+// Tap a route row to pull it back into the form for tweaking — it leaves the
+// list and "+ Add route" puts it back. ⧉ re-logs a copy of a route in one tap
+// (styles copied, not shared, so editing the copy won't mutate the original).
+function editRoute(i) {
+  const r = currentRoutes.splice(i, 1)[0];
+  document.getElementById('routeGrade').value = r.grade;
+  document.getElementById('routeResult').value = r.result;
+  document.getElementById('routeAttempts').value = r.attempts || 1;
+  document.getElementById('routeAttempts').style.display = r.result === 'Flash' ? 'none' : 'block';
+  document.getElementById('routeWall').value = r.wall || '';
+  const styles = r.styles || [];
+  document.querySelectorAll('#routeStyles .style-chip').forEach(c =>
+    c.classList.toggle('active', styles.includes(c.dataset.style)));
+  document.getElementById('routeNote').value = r.notes || '';
+  renderRouteList();
+}
+
+function duplicateRoute(i) {
+  const r = currentRoutes[i];
+  currentRoutes.push({ ...r, styles: (r.styles || []).slice() });
+  renderRouteList();
 }
 
 document.getElementById('btnSaveClimb').addEventListener('click', async () => {
@@ -2818,13 +2844,27 @@ function renderClimbHistory(sessions) {
     const isPending = !!s._pending;
     const div = document.createElement('div');
     div.className = 'session-card' + (isPending ? ' pending' : '');
+    // Tapping the card expands per-route detail (wall, styles, note) along
+    // with the Edit/Delete actions — otherwise styles/notes are write-only.
+    const detail = routes.map(r => {
+      const styles = (r.styles || []).join(', ');
+      const meta = [r.wall, styles].filter(Boolean).join(' · ');
+      return `<div style="margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="route-pill ${r.result}">${r.grade} ${r.result}${r.attempts > 1 ? ' ('+r.attempts+')' : ''}</span>
+          <span style="font-size:11px;color:var(--text3)">${meta}</span>
+        </div>
+        ${r.notes ? `<div style="font-size:11px;color:var(--text3);margin:2px 0 0 4px">${escapeHtml(r.notes)}</div>` : ''}
+      </div>`;
+    }).join('');
     div.innerHTML = `
       <div class="session-header">
         <span class="session-date">${s.Date}${s.Time ? ' · ' + s.Time : ''}${isPending ? '<span class="pending-pill">pending sync</span>' : ''}</span>
         <span class="session-meta">${s.Location || ''} · ${s.Duration || ''}min · ${routes.length} routes</span>
       </div>
       <div class="session-routes">${pills}</div>
-      ${isPending ? '' : `<div class="session-actions" style="display:none">
+      ${isPending ? '' : `<div class="session-route-detail" style="display:none;margin-top:6px">${detail}</div>
+      <div class="session-actions" style="display:none">
         <button class="btn btn-secondary btn-sm btn-edit">Edit</button>
         <button class="btn btn-danger btn-sm btn-delete">Delete</button>
       </div>`}
@@ -2833,7 +2873,10 @@ function renderClimbHistory(sessions) {
       div.addEventListener('click', (e) => {
         if (e.target.closest('.btn-edit') || e.target.closest('.btn-delete')) return;
         const actions = div.querySelector('.session-actions');
-        actions.style.display = actions.style.display === 'none' ? 'flex' : 'none';
+        const routeDetail = div.querySelector('.session-route-detail');
+        const show = actions.style.display === 'none';
+        actions.style.display = show ? 'flex' : 'none';
+        routeDetail.style.display = show ? 'block' : 'none';
       });
       div.querySelector('.btn-edit').addEventListener('click', () => {
         climbEditRowIndex = s._rowIndex;
